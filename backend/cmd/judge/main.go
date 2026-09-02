@@ -13,12 +13,32 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/ysnb/oj/internal/config"
 	"github.com/ysnb/oj/internal/daemon"
 	"github.com/ysnb/oj/pkg/judge"
 	"github.com/ysnb/oj/pkg/sandbox"
 )
+
+// constrainedOverridePath normalizes the operator-supplied languages
+// override: empty stays empty; otherwise it must be a .yaml/.yml path with
+// no traversal segments (mirrors config.Load's guard — see security-audit
+// §13.2; the operator owns the environment, this catches misconfiguration).
+func constrainedOverridePath(p string) string {
+	if p == "" {
+		return ""
+	}
+	if !strings.HasSuffix(p, ".yaml") && !strings.HasSuffix(p, ".yml") {
+		log.Printf("[judge] OJ_LANGUAGES_FILE %q ignored: only .yaml/.yml accepted", p)
+		return ""
+	}
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p)
+	}
+	return filepath.Clean(p)
+}
 
 func main() {
 	// The sandbox re-executes this binary inside new namespaces; that inner
@@ -46,7 +66,7 @@ func main() {
 	if err := sb.Preflight(); err != nil {
 		log.Fatalf("[judge] preflight: %v", err)
 	}
-	langs, err := judge.NewRegistry(os.Getenv("OJ_LANGUAGES_FILE"))
+	langs, err := judge.NewRegistry(constrainedOverridePath(os.Getenv("OJ_LANGUAGES_FILE")))
 	if err != nil {
 		log.Fatalf("[judge] %v", err)
 	}

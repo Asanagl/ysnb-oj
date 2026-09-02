@@ -31,6 +31,10 @@ import (
 )
 
 func main() {
+	// --config / OJ_CONFIG are operator inputs (the principal starting the
+	// service); config.Load constrains them to .yaml files without traversal
+	// segments so a wrong env var cannot point the process at arbitrary
+	// non-config files (security-audit §13.2/§13.5).
 	cfgPath := os.Getenv("OJ_CONFIG")
 	if len(os.Args) > 1 && os.Args[1] == "--config" && len(os.Args) > 2 {
 		cfgPath = os.Args[2]
