@@ -1,0 +1,20 @@
+[Unit]
+Description=YSNB OJ API server
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oj
+WorkingDirectory=/opt/oj
+EnvironmentFile=/opt/oj/oj.env
+ExecStart=/opt/oj/oj-api
+Restart=always
+RestartSec=3
+# API is a plain web server: no extra caps needed.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/oj/data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,43 @@
+# Judge language profiles. Adding a language later means adding an entry
+# here (or a mounted override file) — no code change.
+#   source_file   filename the submitted code is written as
+#   compile.*     optional; absent => interpreted language
+#   run.argv      {MEM} placeholder is replaced by the per-problem JVM heap
+#   time_multiplier applied to the problem's time limit (startup overhead)
+#   mem_overhead_mb  added to the problem's memory limit (runtime overhead)
+languages:
+  - id: cpp
+    name: "C++ 17 (g++)"
+    source_file: "main.cpp"
+    compile:
+      argv: ["g++", "-O2", "-std=c++17", "-Wall", "-o", "main", "main.cpp"]
+      timeout_s: 60
+      mem_mb: 1024
+    run:
+      argv: ["./main"]
+      time_multiplier: 1.0
+      mem_overhead_mb: 8
+      stack_kb: 262144
+      as_limited: true
+  - id: python3
+    name: "Python 3"
+    source_file: "main.py"
+    run:
+      argv: ["python3", "-B", "main.py"]
+      time_multiplier: 4.0
+      mem_overhead_mb: 128
+      stack_kb: 262144
+      as_limited: true
+  - id: java
+    name: "Java 17"
+    source_file: "Main.java"
+    compile:
+      argv: ["javac", "Main.java"]
+      timeout_s: 60
+      mem_mb: 1024
+    run:
+      argv: ["java", "-Xss256m", "-Xmx{MEM}m", "-XX:-UsePerfData", "Main"]
+      time_multiplier: 3.0
+      mem_overhead_mb: 512
+      stack_kb: 262144
+      as_limited: false   # JVM reserves huge virtual address space; cgroup enforces RSS

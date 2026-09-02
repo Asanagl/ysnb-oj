@@ -1,0 +1,19 @@
+[Unit]
+Description=YSNB OJ judge daemon (sandbox, needs root + cgroup v2)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/oj
+EnvironmentFile=/opt/oj/oj-judge.env
+ExecStart=/opt/oj/oj-judge
+Restart=always
+RestartSec=3
+# why no sandboxing directives here: this process itself creates namespaces,
+# manages cgroups and drops privileges for every judge task; adding
+# systemd-level restrictions would break the very isolation it provides.
+
+[Install]
+WantedBy=multi-user.target

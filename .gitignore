@@ -1,0 +1,59 @@
+# build artifacts
+dist/
+backend/dist/
+*.exe
+*.test
+*.out
+
+# go
+backend/data/
+data-smoke/
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+
+# runtime / secrets
+.env
+*.db
+*.log
+smoke*
+oj.env
+oj-judge.env
+
+# editors
+.vscode/
+.idea/
+.mimosa/
+
+# remote-test credentials & artifacts (never public)
+remote-test/.ojenv
+remote-test/.sshenv
+remote-test/.credentials-*.txt
+remote-test/oj-api-*
+remote-test/oj-judge-*
+remote-test/bench-cases.zip
+remote-test/dist.tar.gz
+
+# remote-test build/deploy artifacts (regenerable, never public)
+remote-test/push-*.sh
+remote-test/*.zip
+remote-test/seccprobe
+remote-test/tmp-*
+remote-test/oj-api-m5
+remote-test/oj-judge-m5
+
+# zcode session artifacts
+.zcode/
+
+# remote-test local tool state & regenerable binaries
+remote-test/.mimosa/
+remote-test/steps/
+remote-test/sandbox.test
+remote-test/node_modules/
+remote-test/node_modules
+remote-test/fill-*
+remote-test/gen-push-test.js
+remote-test/gen-webzip.py
+remote-test/bench-optimized*.json
+remote-test/bench-baseline.json

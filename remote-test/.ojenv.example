@@ -1,0 +1,12 @@
+# YSNB OJ E2E 环境变量模板
+# 复制为 .ojenv 并填写真实值；.ojenv 已被 .gitignore 覆盖，绝不提交。
+# BASE 指向被测 API 根（本地开发示例 http://localhost:8080/api/v1）
+BASE=http://localhost:8080/api/v1
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=change-me-admin-password
+
+# SSH 部署通道（仅 remote-test 的部署脚本使用；复制 .sshenv）
+# HOST=
+# PORT=22
+# USER=root
+# PASSWORD=

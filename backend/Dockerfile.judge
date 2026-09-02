@@ -1,0 +1,22 @@
+# Judge daemon image: the sandbox needs real Linux (cgroup v2, namespaces)
+# and the language toolchains users submit against. Run privileged — the
+# sandbox itself is the security boundary; see docs/architecture.md §安全模型.
+FROM golang:1.27-alpine AS build
+WORKDIR /src
+ENV GOPROXY=https://goproxy.cn,direct CGO_ENABLED=0
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN go build -o /out/oj-judge ./cmd/judge
+
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential openjdk-17-jdk-headless python3 \
+        ca-certificates tzdata && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=build /out/oj-judge /usr/local/bin/oj-judge
+# maintenance CLI available in the judge container too (doctor etc.)
+COPY --from=build /src/cli-out/oj-cli /usr/local/bin/oj-cli
+# work root and cache dirs must not live under hidden paths
+RUN mkdir -p /oj-work /oj-data
+ENTRYPOINT ["/usr/local/bin/oj-judge"]

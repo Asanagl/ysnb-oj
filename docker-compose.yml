@@ -1,0 +1,92 @@
+# YSNB OJ V1 开发/部署编排。
+# 密钥一律来自 .env（gitignored），复制 .env.example 填写，勿提交真实值。
+name: ysnb-oj
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: oj
+      POSTGRES_USER: ${OJ_PG_USER}
+      POSTGRES_PASSWORD: ${OJ_PG_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${OJ_PG_USER} -d oj"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      OJ_MODE: prod
+      OJ_LISTEN: ":8080"
+      OJ_GRPC_ADDR: ":9090"
+      OJ_DATA_DIR: /oj-data
+      OJ_FETCH_BASE: ${OJ_FETCH_BASE}
+      OJ_DB_DRIVER: postgres
+      OJ_DB_DSN: "host=postgres user=${OJ_PG_USER} password=${OJ_PG_PASSWORD} dbname=oj sslmode=disable"
+      OJ_REDIS_ADDR: "redis:6379"
+      OJ_JWT_SECRET: ${OJ_JWT_SECRET}
+      OJ_DAEMON_SECRET: ${OJ_DAEMON_SECRET}
+      OJ_ADMIN_USERNAME: ${OJ_ADMIN_USERNAME}
+      OJ_ADMIN_PASSWORD: ${OJ_ADMIN_PASSWORD}
+      OJ_CLI_TOKEN: ${OJ_CLI_TOKEN:-}
+    volumes:
+      - ojdata:/oj-data
+    # why no published ports: 8080/9090 must stay inside the compose network
+    # (nginx proxies /api/, judge daemons reach grpc via the service name).
+    # Publishing them would let the internet bypass the edge proxy and its
+    # rate-limit trust chain (P0 in the security review).
+    expose:
+      - "8080"
+      - "9090"
+
+  judge:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.judge
+    privileged: true # 沙箱需要 cgroup/ns 能力；隔离由沙箱自身提供
+    depends_on:
+      - api
+    environment:
+      OJ_MODE: prod
+      OJ_DATA_DIR: /oj-data
+      OJ_API_ENDPOINT: "api:9090"
+      OJ_FETCH_BASE: "http://api:8080"
+      OJ_DAEMON_NAME: judge-1
+      OJ_DAEMON_TOKEN: ${OJ_DAEMON_SECRET}
+      # 3.9GB 单机安全值：每槽编译 cgroup ~1GB + 沙箱峰值；内存更大可调高
+      OJ_MAX_PARALLEL: "1"
+      OJ_CGROUP_BASE: /sys/fs/cgroup/oj-judge
+      OJ_WORK_ROOT: /oj-work
+    volumes:
+      - ojdata:/oj-data
+    pid: "host"
+
+  web:
+    image: nginx:1.27-alpine
+    depends_on:
+      - api
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+
+volumes:
+  pgdata:
+  redisdata:
+  ojdata:

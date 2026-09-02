@@ -1,0 +1,41 @@
+{
+  "name": "syuct-oj-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@codemirror/lang-cpp": "^6.0.2",
+    "@codemirror/lang-java": "^6.0.1",
+    "@codemirror/lang-python": "^6.2.0",
+    "@element-plus/icons-vue": "^2.3.2",
+    "@tiptap/extension-code-block-lowlight": "^3.30.5",
+    "@tiptap/extension-image": "^3.30.5",
+    "@tiptap/extension-link": "^3.30.5",
+    "@tiptap/starter-kit": "^3.30.5",
+    "@tiptap/vue-3": "^3.30.5",
+    "axios": "^1.13.2",
+    "codemirror": "^6.0.2",
+    "echarts": "^6.1.0",
+    "element-plus": "^2.13.6",
+    "highlight.js": "^11.11.1",
+    "katex": "^0.16.28",
+    "markdown-it": "^14.1.0",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.41",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^24.13.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/tsconfig": "^0.9.1",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2",
+    "vue-tsc": "^3.3.11"
+  }
+}

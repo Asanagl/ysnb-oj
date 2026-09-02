@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package oj;
+
+option go_package = "github.com/ysnb/oj/pb;pb";
+
+// JudgeRelay is the bidi stream between the API server and one judge daemon.
+// Daemons connect outwards (no inbound firewall hole on judge machines) and
+// the API pushes tasks down the same stream results arrive on.
+service JudgeRelay {
+  rpc Connect(stream DaemonMessage) returns (stream ApiMessage);
+}
+
+message DaemonMessage {
+  oneof body {
+    Register register = 1;
+    Heartbeat heartbeat = 2;
+    TaskResult result = 3;
+  }
+}
+
+message Register {
+  string daemon_name = 1;
+  string token = 2;
+  int32 capacity = 3;
+  repeated string languages = 4;
+  string version = 5;
+}
+
+message Heartbeat {
+  int32 active_tasks = 1;
+  double load1 = 2;
+  double mem_used_mb = 3;
+  double mem_total_mb = 4;
+}
+
+message TaskResult {
+  uint64 submission_id = 1;
+  string status = 2;
+  int64 time_ms = 3;
+  int64 memory_kb = 4;
+  string compile_message = 5;
+  repeated CaseResult cases = 6;
+  string error = 7; // SE detail when status == SE
+  int64 score = 8;  // IOI partial credit: sum of per-case scores (0 in ACM mode)
+}
+
+message CaseResult {
+  int32 index = 1;
+  string status = 2;
+  int64 time_ms = 3;
+  int64 memory_kb = 4;
+  string message = 5;
+  int64 score = 6; // per-case partial credit (IOI); 0 in ACM mode
+}
+
+message ApiMessage {
+  oneof body {
+    TaskDispatch dispatch = 1;
+    Kick kick = 2;
+  }
+}
+
+message TaskDispatch { JudgeTask task = 1; }
+
+message Kick { string reason = 1; }
+
+message JudgeTask {
+  uint64 submission_id = 1;
+  uint64 problem_id = 2;
+  string language_id = 3;
+  bytes code = 4;
+  int64 time_limit_ms = 5;
+  int64 mem_limit_mb = 6;
+  string judge_mode = 7;
+  bytes checker_source = 8;
+  bytes interactor_source = 9;
+  string fetch_base = 10;   // http base for testdata download
+  string fetch_token = 11;  // same shared daemon token, scoped by transport
+  repeated CaseRef cases = 12;
+  bool stop_on_fail = 13;   // contest mode: stop at first non-AC case; rest are reported SKIPPED
+}
+
+// CaseRef points at testdata blobs; daemons fetch by sha256 and cache.
+message CaseRef {
+  int32 index = 1;
+  string input_sha256 = 2;
+  string answer_sha256 = 3;
+  int64 input_size = 4;
+  int64 answer_size = 5;
+  int32 score = 6; // IOI partial credit assigned to this case; 0 = ACM
+}

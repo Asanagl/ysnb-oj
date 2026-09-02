@@ -1,0 +1,98 @@
+/* Global responsive foundation.
+   Tiers: phone <768 · tablet 768–1279 · desktop 1280–1919 · wide ≥1920 · ultrawide ≥2560.
+   why #app is fluid: the old scaffold style pinned it to a centered 1126px
+   column, which fought the fluid wide-screen layout decided for the project. */
+
+#app {
+  min-height: 100vh;
+  text-align: left;
+}
+
+body {
+  margin: 0;
+  background: #f5f7fa;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Unified design language: one radius / spacing / accent vocabulary for
+   player side and admin console. */
+.el-card {
+  border-radius: 10px;
+  border: 1px solid #ebeef5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.el-button--primary {
+  --el-button-border-color: #409eff;
+}
+.el-table {
+  --el-table-border-color: #ebeef5;
+}
+
+/* Fluid content: full width with sane gutters; on ultrawide cap the line
+   length so text does not span 3000px+. Pages choose their own inner grids. */
+.oj-page {
+  padding: 12px;
+}
+@media (min-width: 768px) {
+  .oj-page { padding: 16px 20px; }
+}
+@media (min-width: 1920px) {
+  .oj-page { padding: 20px 32px; }
+}
+@media (min-width: 2560px) {
+  .oj-page { padding: 24px 48px; font-size: 15px; }
+}
+
+/* Statement typography (markdown problem bodies). */
+.statement {
+  line-height: 1.75;
+  word-break: break-word;
+}
+.statement pre {
+  background: #282c34;
+  color: #abb2bf;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.statement code {
+  background: #f0f2f5;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+.statement pre code {
+  background: transparent;
+  padding: 0;
+}
+.statement img {
+  max-width: 100%;
+}
+
+/* Element Plus tables: allow narrow screens to scroll instead of squashing.
+   why a wrapper: el-table manages its own overflow only when its container
+   is width-bounded; in fluid layouts it is not. */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Touch devices: bigger hit areas and a larger editor font for thumb typing.
+   why (hover:none)+(pointer:coarse): detects real touch capability, not UA. */
+@media (hover: none) and (pointer: coarse) {
+  .el-button {
+    min-height: 44px;
+  }
+  .cm-editor .cm-content {
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .oj-page { padding: 10px; }
+}
+
+/* Ultrawide: gently scale table type so rows read at couch distance. */
+@media (min-width: 2560px) {
+  .el-table { font-size: 15px; }
+  h2 { font-size: 22px; }
+}

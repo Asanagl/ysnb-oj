@@ -1,0 +1,9 @@
+{
+  "name": "remote-test",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "dependencies": {
+    "ssh2": "^1.16.0"
+  }
+}

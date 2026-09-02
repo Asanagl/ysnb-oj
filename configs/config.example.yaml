@@ -1,0 +1,32 @@
+# YSNB OJ 后端配置示例。
+# 复制为 config.yaml 并按需修改；敏感值推荐用 OJ_* 环境变量注入而非写文件。
+
+listen: ":8080"        # http（网页 API）
+grpc_addr: ":9090"     # gRPC（判题机接入）
+mode: "prod"           # dev 时可用 sqlite + 内存队列零依赖启动
+data_dir: "/opt/oj/data"
+fetch_base: "http://127.0.0.1:8080"  # 判题机下载测试数据用的 API 地址
+
+database:
+  driver: postgres     # postgres | sqlite
+  dsn: "host=127.0.0.1 user=oj password=SET_ME dbname=oj sslmode=disable"
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+# jwt/daemon_secret 建议通过 OJ_JWT_SECRET / OJ_DAEMON_SECRET 注入
+jwt:
+  secret: ""
+  expire_hours: 72
+  daemon_secret: ""
+
+judge:
+  api_endpoint: "127.0.0.1:9090"  # 判题机连接的 gRPC 地址
+  daemon_name: "judge-1"
+  daemon_token: ""                # 与 jwt.daemon_secret 一致
+  max_parallel: 2
+  cgroup_base: "/sys/fs/cgroup/oj-judge"
+  work_root: "/oj-work"           # 不得位于 /home 或 data_dir 之下
+  compile_timeout_s: 60
