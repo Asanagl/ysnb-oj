@@ -117,29 +117,26 @@ bash deploy/one-click.sh
 systemd 裸机部署路线（适合校内已有服务器、不想用 Docker）：
 见 **[docs/deploy.md](docs/deploy.md)** 方式 B（systemd 单元 + 环境变量 + nginx 配置齐备）。
 
-### 本地开发（Windows / 任意平台）
+### 开发（后端仅 Linux；Windows/macOS 只跑前端工具链）
+
+**后端不在开发机本地运行**——判题沙箱依赖 cgroup v2 + namespaces，是 Linux-only 的，
+Windows/macOS 上既不支持运行，也不建议跑一个行为不一致的残缺后端。所有后端交互都
+发生在 Linux 部署上（上面任一方式部署出的实例即可）：
 
 ```bash
-# 后端：零依赖启动（SQLite + 内存队列；dev 模式自动生成临时 JWT 密钥）
-cd backend
-OJ_ADMIN_USERNAME=admin OJ_ADMIN_PASSWORD=<你的密码> OJ_LISTEN=:18080 go run ./cmd/api
-# HTTP :18080（对齐前端开发代理）/ gRPC :9090；默认监听 :8080，可用 --config 指向 configs/config.example.yaml
-
-# 前端
+# 前端（本地只跑 vite 工具链，/api 代理到你的 Linux 部署）
 cd frontend
-npm install && npm run dev     # http://localhost:5173，/api 已代理到 127.0.0.1:18080
-```
+npm install
+OJ_DEV_API_TARGET=http://<你的部署地址> npm run dev   # http://localhost:5173
 
-判题沙箱只能在 **Linux** 上运行；在开发机上交叉编译后拿到 Linux 服务器验证：
-
-```bash
+# 后端与判题机：在 Linux 上构建、测试、运行（非 Linux 开发机先交叉编译）
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o oj-judge ./cmd/judge
 # 拷到 Linux 服务器后：
 sudo ./oj-judge --selftest     # 验证 cgroup v2 / namespace / seccomp 环境
 sudo ./oj-judge                # 连接 API 开始接单
 ```
 
-跑测试：
+跑测试（在 Linux 上，对着真实部署）：
 
 ```bash
 cd backend && go test ./...    # 沙箱外核心逻辑：比对、聚合判定、榜单、JWT、队列、CSV
@@ -149,7 +146,7 @@ bash scripts/e2e-test.sh       # 一键 API E2E（自启自清，退出码非 0 
 ## 架构
 
 ```
-浏览器 ──Vue3 SPA──► Nginx ──► Go API Server ──► PostgreSQL（生产）/ SQLite（开发）
+浏览器 ──Vue3 SPA──► Nginx ──► Go API Server ──► PostgreSQL（生产）/ SQLite（自测）
                                   │         └──► Redis（判题队列 / 限流 / 会话）
                                   │  WebSocket 推送（submission / contest / admin:daemons）
                                   │  插件注册表（编译期）：webhook + 外部平台适配器

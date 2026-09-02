@@ -3,7 +3,7 @@
 ## 总览
 
 ```
-浏览器 ──Vue3 SPA──► Nginx ──► Go API Server ──► PostgreSQL（生产）/ SQLite（开发）
+浏览器 ──Vue3 SPA──► Nginx ──► Go API Server ──► PostgreSQL（生产）/ SQLite（自测）
                                    │        └──► Redis Stream/List（判题队列）
                                    │ gRPC JudgeRelay（bidi stream）
                                    ▼

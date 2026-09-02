@@ -20,7 +20,11 @@ const finish = (code, msg) => {
   if (settled) return;
   settled = true;
   console.log(msg);
-  process.exit(code);
+  process.exitCode = code;
+  // Graceful exit: a hard process.exit while the socket handle is still
+  // closing trips a libuv assertion on Windows (UV_HANDLE_CLOSING) and
+  // turns a passing probe into a non-zero exit. Give handles a beat.
+  setTimeout(() => process.exit(process.exitCode ?? 0), 250);
 };
 const guard = setTimeout(
   () => finish(1, `WS-FAIL: ${mode} timed out (opened=${opened})`),
@@ -41,11 +45,16 @@ ws.addEventListener("open", () => {
     return;
   }
   ws.send(JSON.stringify({ subscribe: "admin:daemons" }));
-  setTimeout(() => finish(0, passMsg), 1000);
+  setTimeout(() => {
+    try { ws.close(); } catch { /* already dead */ }
+    finish(0, passMsg);
+  }, 1000);
 });
 ws.addEventListener("error", () => {
   if (mode === "anon") {
-    // error without open is the expected 401 rejection; close confirms it
+    // a handshake rejection surfaces as error (often WITHOUT a close event
+    // on undici's WebSocket) — for anon that is exactly the expected 401.
+    finish(0, passMsg);
   }
 });
 ws.addEventListener("close", () => {

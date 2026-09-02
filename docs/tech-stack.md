@@ -9,7 +9,7 @@
 |---|---|---|
 | Go | **1.27**（go.mod） | 单静态二进制，`CGO_ENABLED=0` 可在 Windows 开发机交叉编译 Linux 判题程序 |
 | Gin | v1.10 | HTTP 路由 + 中间件（JWT/banGate/限流/body 上限） |
-| GORM | + glebarez/sqlite v1.11 | 生产 PostgreSQL、开发 SQLite 双方言共用 schema；JSON 类字段存 text |
+| GORM | + glebarez/sqlite v1.11 | 生产 PostgreSQL、自测 SQLite 双方言共用 schema；JSON 类字段存 text |
 | go-redis | v9 | Redis Stream 判题队列、会话、限流（开发用内存队列替代，`internal/queue` 抽象） |
 | gRPC | v1.83 | `proto/oj.proto` 定义 `JudgeRelay.Connect` 双向流（任务下发/结果回传/心跳） |
 | golang-jwt v5 + x/crypto | — | JWT 会话（`OJ_JWT_EXPIRE_HOURS` 控制有效期）+ bcrypt 密码 |

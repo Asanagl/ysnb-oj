@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 # e2e-test.sh — self-contained API E2E suite for YSNB OJ.
-# Boots a fresh oj-api.exe against a throwaway sqlite data dir, walks the
-# normal + adversarial flows with per-step PASS/FAIL, then tears everything
-# down. Exit code 0 = all checks passed. Safe to re-run at any time.
+# Builds the oj-api binary, boots it against a throwaway sqlite data dir,
+# walks the normal + adversarial flows with per-step PASS/FAIL, then tears
+# everything down. Exit code 0 = all checks passed. Safe to re-run at any
+# time. Needs: go, node, curl on PATH (any OS with a POSIX shell).
 set -u
-ROOT=/c/Users/Asanagi/syuct_onlinejudge
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
-
-export PATH="/c/Users/Asanagi/tools/go-sdk/go/bin:/c/Users/Asanagi/go/bin:$PATH"
-export GOPATH=/c/Users/Asanagi/go GOPROXY=https://goproxy.cn,direct
 
 BASE=127.0.0.1:18081
 API="http://$BASE/api/v1"
@@ -62,23 +60,32 @@ postj() { # postj <url> <json-string> [extra curl args...]
 }
 
 cleanup() {
-  taskkill //IM oj-api.exe //F >/dev/null 2>&1
+  if [ -f "$ROOT/.e2e-api.pid" ]; then
+    E2E_PID=$(cat "$ROOT/.e2e-api.pid")
+    kill "$E2E_PID" >/dev/null 2>&1
+    # wait for the process to actually exit before rm — otherwise the db
+    # file is still held and cleanup fails with "Device or resource busy"
+    for _ in $(seq 1 20); do
+      kill -0 "$E2E_PID" 2>/dev/null || break
+      sleep 0.2
+    done
+  fi
   rm -rf "$ROOT/data-e2e" "$ROOT/data-e2e.log" "$ROOT/.e2e-body.tmp" \
          "$ROOT/.e2e-stage" "$ROOT/.e2e-testdata.zip" "$ROOT/.e2e-garbage.txt" \
          "$ROOT/.e2e-traversal.zip" "$ROOT/.e2e-big.json" "$ROOT/.e2e-bigcode.json" \
-         "$ROOT/.e2e-users.csv" "$ROOT/.e2e-conc."*
+         "$ROOT/.e2e-users.csv" "$ROOT/.e2e-conc."* "$ROOT/.e2e-api.pid" "$ROOT/.e2e-api-bin"
 }
 trap cleanup EXIT
 
 echo "=== setup ==="
-taskkill //IM oj-api.exe //F >/dev/null 2>&1
 rm -rf "$ROOT/data-e2e" "$ROOT/data-e2e.log"
-go -C backend build -o ../dist/oj-api.exe ./cmd/api || { echo "FATAL: build failed"; exit 1; }
+go -C backend build -o "$ROOT/.e2e-api-bin" ./cmd/api || { echo "FATAL: build failed"; exit 1; }
 OJ_MODE=dev OJ_DATA_DIR=./data-e2e OJ_DB_DRIVER=sqlite OJ_DB_DSN=./data-e2e/oj.db \
 OJ_LISTEN=$BASE OJ_GRPC_ADDR=127.0.0.1:19091 \
 OJ_ADMIN_USERNAME=$ADMIN_USER OJ_ADMIN_PASSWORD=$ADMIN_PASS \
 OJ_JWT_SECRET=E2eJwtSecret-LocalOnly-2026 OJ_DAEMON_SECRET=$DAEMON_SECRET \
-./dist/oj-api.exe > data-e2e.log 2>&1 &
+"$ROOT/.e2e-api-bin" > data-e2e.log 2>&1 &
+echo $! > "$ROOT/.e2e-api.pid"
 for i in $(seq 1 40); do
   curl -s -o /dev/null "$API/languages" && break
   sleep 0.5
@@ -106,9 +113,9 @@ postj "$API/admin/invite-codes" '{"max_uses":1}' -H "Authorization: Bearer $ADMI
 INVITE1=$(jget code)
 [ -n "$INVITE1" ] && ok "invite code created" || bad "invite code empty"
 status "register with invite code is 200" 200 -X POST -H "Content-Type: application/json" \
-  -d "{\"username\":\"e2e-user\",\"password\":\"$USER_PASS\",\"nickname\":\"E2E User\",\"invite_code\":\"$INVITE1\"}" "$API/auth/register"
+  -d "{\"username\":\"e2e-user\",\"password\":\"$USER_PASS\",\"nickname\":\"E2E User\",\"student_no\":\"2026E2E0001\",\"invite_code\":\"$INVITE1\"}" "$API/auth/register"
 status "duplicate username register is 400" 400 -X POST -H "Content-Type: application/json" \
-  -d "{\"username\":\"e2e-user\",\"password\":\"$USER_PASS\",\"invite_code\":\"$INVITE1\"}" "$API/auth/register"
+  -d "{\"username\":\"e2e-user\",\"password\":\"$USER_PASS\",\"student_no\":\"2026E2E0001\",\"invite_code\":\"$INVITE1\"}" "$API/auth/register"
 status "invalid invite code register is 400" 400 -X POST -H "Content-Type: application/json" \
   -d "{\"username\":\"e2e-other\",\"password\":\"$USER_PASS\",\"invite_code\":\"NOPE1234\"}" "$API/auth/register"
 status "exhausted invite code register is 400" 400 -X POST -H "Content-Type: application/json" \
@@ -167,7 +174,7 @@ echo "=== 7. testdata upload ==="
 mkdir -p "$ROOT/.e2e-stage"
 printf '1 2\n'    > "$ROOT/.e2e-stage/1.in";  printf '3\n'  > "$ROOT/.e2e-stage/1.out"
 printf '10 20\n' > "$ROOT/.e2e-stage/2.in";  printf '30\n' > "$ROOT/.e2e-stage/2.out"
-powershell.exe -NoProfile -Command "Compress-Archive -Force -Path '.e2e-stage/*' -DestinationPath '.e2e-testdata.zip'" >/dev/null
+go run scripts/zipmake.go -mode testdata -out "$ROOT/.e2e-testdata.zip" || bad "zipmake testdata failed"
 status "testdata zip upload is 200" 200 -H "Authorization: Bearer $ADMIN_TOKEN" \
   -F "file=@$ROOT/.e2e-testdata.zip" "$API/problems/$PROB_ID/testdata"
 jcheck "stored 2 cases" 'd.stored===2'
@@ -210,14 +217,21 @@ postj "$API/contests" "{\"title\":\"E2E Contest\",\"mode\":\"acm\",\"visibility\
   -H "Authorization: Bearer $ADMIN_TOKEN" >/dev/null
 CONTEST_ID=$(jget id)
 [ -n "$CONTEST_ID" ] && ok "contest created id=$CONTEST_ID" || bad "contest create failed"
+# 新建比赛默认报名制（M3 起）：不报名的提交会被 400 拒绝
+status "contest registration is 200" 200 -X POST -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
+  -d '{"team_name":"E2E Solo","team_type":"official"}' "$API/contests/$CONTEST_ID/register"
 status "attach problem to contest is 200" 200 -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d "{\"problem_ids\":[$PROB_ID]}" "$API/contests/$CONTEST_ID/problems"
+# 挂题生成独立副本（M3 起）：比赛提交必须打副本 id，原题 id 不属于比赛
+curl -s -o "$BODY" -H "Authorization: Bearer $USER_TOKEN" "$API/contests/$CONTEST_ID"
+CONTEST_PROB_ID=$(jget problems.0.id)
+[ -n "$CONTEST_PROB_ID" ] && ok "contest problem copy id=$CONTEST_PROB_ID" || bad "no contest problem copy"
 postj "$API/contests" "{\"title\":\"E2E Future Contest\",\"visibility\":\"public\",\"start_time\":\"$START2\",\"end_time\":\"$END2\"}" \
   -H "Authorization: Bearer $ADMIN_TOKEN" >/dev/null
 FUTURE_ID=$(jget id)
 postj "$API/problems" '{"title":"E2E Unlinked Problem","visibility":"members"}' -H "Authorization: Bearer $ADMIN_TOKEN" >/dev/null
 UNLINKED_ID=$(jget id)
-S2=$(postj "$API/submissions" "{\"problem_id\":$PROB_ID,\"contest_id\":$CONTEST_ID,\"language\":\"cpp\",\"code\":\"int main(){return 0;}\"}" -H "Authorization: Bearer $USER_TOKEN")
+S2=$(postj "$API/submissions" "{\"problem_id\":$CONTEST_PROB_ID,\"contest_id\":$CONTEST_ID,\"language\":\"cpp\",\"code\":\"int main(){return 0;}\"}" -H "Authorization: Bearer $USER_TOKEN")
 check "in-window contest submit is 200" 200 "$S2"
 SUB2_ID=$(jget id)
 status "future-window contest submit is 400" 400 -X POST -H "Authorization: Bearer $USER_TOKEN" -H "Content-Type: application/json" \
@@ -246,8 +260,12 @@ status "admin GET /admin/daemons is 200" 200 -H "Authorization: Bearer $ADMIN_TO
 jcheck "daemons response has queue_length" 'typeof d.queue_length==="number"'
 
 echo "=== 12. WebSocket ==="
-node scripts/ws-probe.mjs valid "$ADMIN_TOKEN"; [ $? -eq 0 ] && ok "WS with valid token" || bad "WS with valid token"
-node scripts/ws-probe.mjs anon;             [ $? -eq 0 ] && ok "WS without token rejected" || bad "WS without token rejected"
+# verdict by probe OUTPUT, not exit code — node/undici can crash non-zero
+# at teardown on Windows (libuv assert) even after printing WS-PASS
+WS_OUT=$(node scripts/ws-probe.mjs valid "$ADMIN_TOKEN" 2>&1); echo "$WS_OUT"
+echo "$WS_OUT" | grep -q "WS-PASS" && ok "WS with valid token" || bad "WS with valid token: $WS_OUT"
+WS_OUT=$(node scripts/ws-probe.mjs anon 2>&1); echo "$WS_OUT"
+echo "$WS_OUT" | grep -q "WS-PASS" && ok "WS without token rejected" || bad "WS without token rejected: $WS_OUT"
 
 echo "=== 13. security extras ==="
 TAMPERED=$(node -e 'const t=process.argv[1];console.log(t.slice(0,30)+(t[30]==="0"?"1":"0")+t.slice(31));' "$USER_TOKEN")

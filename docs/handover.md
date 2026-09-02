@@ -48,10 +48,13 @@ remote-test/        部署与 E2E 工具链（见下）+ 本地凭据 env（勿�
 
 ## 四、日常开发流程
 
-- 本地开发（Windows）：`backend` 直接 `go run ./cmd/api`（SQLite + 内存队列，
-  无需 PG/Redis）；`frontend` `npm run dev` 代理到本地 API。
-- 构建/测试门禁：`go build ./... && go vet ./...`；前端
-  `npx vue-tsc --noEmit` + `npm run build`。
+- **后端不在开发机本地运行**（Linux-only：沙箱依赖 cgroup v2 + namespaces，
+  Windows/macOS 不支持）。前端本地只跑工具链：`frontend` 里
+  `OJ_DEV_API_TARGET=http://<生产地址> npm run dev` 把 /api（含 WS）代理到
+  云服务器生产 API（地址见 `remote-test/.ojenv` 的 BASE，勿写死入库）；
+  后端改动在 Linux 侧构建验证（或交叉编译后部署）。
+- 构建/测试门禁：`go build ./... && go vet ./...`（Linux 上）；前端
+  `npx vue-tsc --noEmit` + `npm run build`（本地）。
 - E2E：`remote-test/*.mjs` 直打生产 API（凭据 .ojenv），每模块一套，
   结果记入 `docs/e2e-report.md`。注意登录限流 10/min/IP，多套脚本要间隔 70s。
 - **改判题核心（尤其 pkg/sandbox）必须**：跑 `seccomp_sim_test.go`（交叉编译

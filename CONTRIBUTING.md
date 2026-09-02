@@ -6,21 +6,23 @@
 
 | 组件 | 要求 |
 |---|---|
-| Go | ≥ 1.27（判题沙箱部分依赖 Linux 特性） |
-| Node.js | ≥ 20（前端构建） |
-| 数据库 | 开发态零依赖：`go run ./cmd/api` 使用纯 Go SQLite + 内存队列；生产建议 PostgreSQL 16 + Redis 7 |
-| 操作系统 | 后端业务可在任意平台开发；**判题沙箱（pkg/sandbox）仅在 Linux 可运行**（cgroup v2 + namespaces），Windows/macOS 开发机请交叉编译到 Linux 服务器验证 |
+| Go | ≥ 1.27（后端**仅在 Linux 上构建与运行**） |
+| Node.js | ≥ 20（前端工具链，任意平台可用） |
+| 后端环境 | **Linux-only**：判题沙箱依赖 cgroup v2 + namespaces，Windows/macOS 不受支持；开发/测试一律对着一个 Linux 部署进行（自有服务器、VM 或已部署实例，见 docs/deploy.md） |
+| 数据库 | 生产 PostgreSQL 16 + Redis 7；开发实例建议直接对齐生产 |
+
+工作流：**后端不在开发机本地运行**。前端工具链本地跑，通过 `OJ_DEV_API_TARGET`
+把 `/api`（含 WebSocket）代理到 Linux 部署；后端改动在 Linux 侧构建、测试、验证。
 
 ```bash
-# 后端（本地开发，SQLite + 内存队列，无需 PG/Redis）
-cd backend && go run ./cmd/api        # 默认 :8080
+# 前端（本地只跑 vite 工具链，/api 代理到 Linux 部署）
+cd frontend && npm ci
+OJ_DEV_API_TARGET=http://<linux-deploy-origin> npm run dev   # :5173
 
-# 前端（Vite dev server 代理到本地 API）
-cd frontend && npm ci && npm run dev
-
-# Linux 判题机（本机为 Linux 时）
-cd backend && sudo -E go run ./cmd/judge
-```
+# 后端与判题机（仅 Linux + root + cgroup v2）
+cd backend && go build ./... && go vet ./... && go test ./...
+go run ./cmd/api                        # 或按 docs/deploy.md 部署为 systemd 服务
+sudo -E go run ./cmd/judge              # 判题机（Linux）
 
 ## 提交前的门禁（必须全绿）
 
