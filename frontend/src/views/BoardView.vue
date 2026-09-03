@@ -14,6 +14,7 @@ const cid = route.params.id as string
 const title = ref('')
 const rows = ref<StandingRow[]>([])
 const problems = ref<{ label: string }[]>([])
+const mode = ref<'acm' | 'ioi'>('acm')
 const frozen = ref(false)
 const now = ref(Date.now())
 const wrap = ref<HTMLDivElement>()
@@ -53,6 +54,7 @@ async function loadAll() {
     document.title = `${d.contest.title} · 大屏`
     dataEnd.value = new Date(d.contest.end_time).getTime()
     frozen.value = !!d.contest.manual_frozen
+    mode.value = d.contest.mode === 'ioi' ? 'ioi' : 'acm'
     problems.value = d.problems
     notices.value = await Contests.notices(cid)
     rows.value = (await Contests.standings(cid)).rows
@@ -124,7 +126,7 @@ async function loadStandingsOnly() {
     </div>
 
     <div ref="wrap" class="proj-board">
-      <ScoreBoard :rows="rows" :problems="problems" large />
+      <ScoreBoard :rows="rows" :problems="problems" :mode="mode" large />
     </div>
 
     <div v-if="noticesText" class="proj-ticker">

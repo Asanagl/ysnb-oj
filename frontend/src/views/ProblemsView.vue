@@ -2,6 +2,17 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Problems } from '../api/client'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Pagination } from '@/components/ui/pagination'
 
 const router = useRouter()
 const items = ref<Awaited<ReturnType<typeof Problems.list>>['items']>([])
@@ -15,36 +26,59 @@ async function load() {
   total.value = r.total
 }
 
+function onPageChange(p: number) {
+  page.value = p
+  load()
+}
+
 onMounted(load)
 </script>
 
 <template>
-  <el-card>
-    <div style="display: flex; gap: 12px; margin-bottom: 12px">
-      <el-input v-model="q" placeholder="按标题搜索" style="width: 300px" @change="page = 1; load()" />
-    </div>
-    <el-table :data="items" @row-click="(row: { id: number }) => router.push(`/problems/${row.id}`)">
-      <el-table-column label="#" prop="id" width="90" />
-      <el-table-column label="标题" prop="title" />
-      <el-table-column label="时限" width="110">
-        <template #default="{ row }">{{ row.time_limit_ms }} ms</template>
-      </el-table-column>
-      <el-table-column label="内存" width="110">
-        <template #default="{ row }">{{ row.mem_limit_mb }} MB</template>
-      </el-table-column>
-      <el-table-column label="类型" width="110">
-        <template #default="{ row }">
-          {{ row.judge_mode === 'default' ? '标准' : row.judge_mode === 'spj' ? '特判' : '交互' }}
-        </template>
-      </el-table-column>
-    </el-table>
-    <el-pagination
-      v-model:current-page="page"
-      layout="prev, pager, next"
-      :total="total"
-      :page-size="20"
-      style="margin-top: 12px"
-      @current-change="load"
-    />
-  </el-card>
+  <Card>
+    <CardContent class="pt-6">
+      <div class="mb-3 flex gap-3">
+        <Input
+          v-model="q"
+          placeholder="按标题搜索"
+          class="w-[300px]"
+          @change="page = 1; load()"
+        />
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-[90px]">#</TableHead>
+            <TableHead>标题</TableHead>
+            <TableHead class="w-[110px]">时限</TableHead>
+            <TableHead class="w-[110px]">内存</TableHead>
+            <TableHead class="w-[110px]">类型</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow
+            v-for="row in items"
+            :key="row.id"
+            class="cursor-pointer"
+            @click="router.push(`/problems/${row.id}`)"
+          >
+            <TableCell>{{ row.id }}</TableCell>
+            <TableCell>{{ row.title }}</TableCell>
+            <TableCell>{{ row.time_limit_ms }} ms</TableCell>
+            <TableCell>{{ row.mem_limit_mb }} MB</TableCell>
+            <TableCell>
+              {{ row.judge_mode === 'default' ? '标准' : row.judge_mode === 'spj' ? '特判' : '交互' }}
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <Pagination
+        :page="page"
+        :page-size="20"
+        :total="total"
+        class="mt-3"
+        @update:page="onPageChange"
+      />
+    </CardContent>
+  </Card>
 </template>

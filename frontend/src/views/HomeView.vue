@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { api, Submissions } from '../api/client'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Stat } from '@/components/ui/stat'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Empty } from '@/components/ui/empty'
 import StatusTag from '../components/StatusTag.vue'
 
 // why no top-level await: <script setup> + top-level await makes this an
@@ -25,41 +36,53 @@ onMounted(async () => {
 </script>
 
 <template>
-  <el-row :gutter="16">
-    <el-col :xs="24" :md="8">
-      <el-card>
-        <h3>我的统计</h3>
-        <el-statistic title="已解决题目" :value="stats.ac_problems" />
-        <div style="margin-top: 12px">
-          <p v-for="(n, s) in stats.by_status" :key="s" style="margin: 4px 0">
+  <div class="grid gap-4 md:grid-cols-3">
+    <Card>
+      <CardHeader>
+        <CardTitle>我的统计</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Stat label="已解决题目" :value="stats.ac_problems" />
+        <div class="mt-3">
+          <p v-for="(n, s) in stats.by_status" :key="s" class="my-1">
             <StatusTag :status="s" /> × {{ n }}
           </p>
         </div>
-      </el-card>
-    </el-col>
-    <el-col :xs="24" :md="16">
-      <el-card>
-        <h3>我最近的提交</h3>
-        <div class="table-scroll">
-          <el-table :data="recent.items" size="small">
-            <el-table-column label="ID" prop="id" width="80" />
-            <el-table-column label="题目" prop="problem_id" width="80" />
-            <el-table-column label="状态">
-              <template #default="{ row }">
+      </CardContent>
+    </Card>
+    <Card class="md:col-span-2">
+      <CardHeader>
+        <CardTitle>我最近的提交</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-20">ID</TableHead>
+              <TableHead class="w-20">题目</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead class="w-24">耗时</TableHead>
+              <TableHead class="w-24">内存</TableHead>
+              <TableHead class="w-24">语言</TableHead>
+              <TableHead>提交时间</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="row in recent.items" :key="row.id">
+              <TableCell>{{ row.id }}</TableCell>
+              <TableCell>{{ row.problem_id }}</TableCell>
+              <TableCell>
                 <StatusTag :status="row.status" />
-              </template>
-            </el-table-column>
-            <el-table-column label="耗时" prop="time_ms" width="100" />
-            <el-table-column label="内存" prop="memory_kb" width="100" />
-            <el-table-column label="语言" prop="language" width="100" />
-            <el-table-column label="提交时间">
-              <template #default="{ row }">
-                {{ new Date(row.created_at).toLocaleString() }}
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-card>
-    </el-col>
-  </el-row>
+              </TableCell>
+              <TableCell>{{ row.time_ms }}</TableCell>
+              <TableCell>{{ row.memory_kb }}</TableCell>
+              <TableCell>{{ row.language }}</TableCell>
+              <TableCell>{{ new Date(row.created_at).toLocaleString() }}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <Empty v-if="!loading && recent.items.length === 0" />
+      </CardContent>
+    </Card>
+  </div>
 </template>
