@@ -82,8 +82,8 @@ async function resubmit(row: { id: number; title: string }) {
             <TableCell>{{ row.id }}</TableCell>
             <TableCell>{{ row.title }}</TableCell>
             <TableCell>
-              <Badge :variant="statusVariant(row.review_status)">
-                {{ statusText[row.review_status] ?? row.review_status }}
+              <Badge :variant="statusVariant(row.review_status ?? '')">
+                {{ statusText[row.review_status ?? ''] ?? row.review_status }}
               </Badge>
             </TableCell>
             <TableCell>

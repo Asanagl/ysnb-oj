@@ -77,7 +77,7 @@ async function onImport(e: Event) {
   }
 }
 
-function openEdit(row: { id: number; username: string; student_no: string; nickname: string }) {
+function openEdit(row: { id: number; username: string; student_no?: string; nickname: string }) {
   Object.assign(editForm, { id: row.id, username: row.username, student_no: row.student_no ?? '', nickname: row.nickname ?? '' })
   editDialog.value = true
 }
@@ -125,7 +125,7 @@ async function onRoleChange(row: { id: number; username: string; role: string },
   }
 }
 
-async function onBanToggle(row: { id: number; username: string; banned: boolean }) {
+async function onBanToggle(row: { id: number; username: string; banned?: boolean }) {
   const next = !row.banned
   if (
     !(await confirmDialog({

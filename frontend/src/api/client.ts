@@ -33,6 +33,8 @@ export interface User {
   nickname: string
   role: string
   student_no?: string
+  // /admin/users serializes the full model; login/me responses omit this
+  banned?: boolean
 }
 
 export interface Problem {
