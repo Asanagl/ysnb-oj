@@ -1,4 +1,6 @@
 import vue from '@vitejs/plugin-vue'
+import tailwindcss from '@tailwindcss/vite'
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 
 // dev proxy: the backend never runs on Windows (Linux-only sandbox); all
@@ -10,7 +12,12 @@ import { defineConfig } from 'vite'
 const target = process.env.OJ_DEV_API_TARGET ?? 'http://127.0.0.1:18080'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   server: {
     port: 5173,
     proxy: {

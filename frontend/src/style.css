@@ -1,3 +1,98 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens → Tailwind utilities. The actual values live on :root / .dark
+   below so theme switching is a single class toggle on <html>. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ac: var(--ac);
+  --color-ac-bg: var(--ac-bg);
+  --color-wa: var(--wa);
+  --color-wa-bg: var(--wa-bg);
+  --color-tle: var(--tle);
+  --color-tle-bg: var(--tle-bg);
+  --color-pending: var(--pending);
+  --color-pending-bg: var(--pending-bg);
+
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Light theme (default). */
+:root {
+  --radius: 0.5rem;
+
+  --background: #f6f7f9;
+  --foreground: #1d2129;
+  --card: #ffffff;
+  --card-foreground: #1d2129;
+  --muted: #f0f2f5;
+  --muted-foreground: #86909c;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --accent-soft: #e8effd;
+  --border: #e3e6ea;
+  --input: #e3e6ea;
+  --ring: #2563eb;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  --ac: #16a34a;
+  --ac-bg: #e7f6ec;
+  --wa: #dc2626;
+  --wa-bg: #fdecec;
+  --tle: #d97706;
+  --tle-bg: #fdf3e3;
+  --pending: #64748b;
+  --pending-bg: #eef1f5;
+}
+
+/* Dark theme. */
+.dark {
+  --background: #0d1117;
+  --foreground: #e6edf3;
+  --card: #161b22;
+  --card-foreground: #e6edf3;
+  --muted: #21262d;
+  --muted-foreground: #6e7781;
+  --primary: #4c8dff;
+  --primary-foreground: #0d1117;
+  --accent-soft: #1b2a45;
+  --border: #2d333b;
+  --input: #2d333b;
+  --ring: #4c8dff;
+  --destructive: #f85149;
+  --destructive-foreground: #0d1117;
+
+  --ac: #3fb950;
+  --ac-bg: #12281a;
+  --wa: #f85149;
+  --wa-bg: #341417;
+  --tle: #d29922;
+  --tle-bg: #2e2410;
+  --pending: #8b949e;
+  --pending-bg: #21262d;
+}
+
 /* Global responsive foundation.
    Tiers: phone <768 · tablet 768–1279 · desktop 1280–1919 · wide ≥1920 · ultrawide ≥2560.
    why #app is fluid: the old scaffold style pinned it to a centered 1126px
@@ -10,13 +105,16 @@
 
 body {
   margin: 0;
-  background: #f5f7fa;
+  background: var(--background);
+  color: var(--foreground);
   font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
+  transition: background 0.2s, color 0.2s;
 }
 
-/* Unified design language: one radius / spacing / accent vocabulary for
-   player side and admin console. */
+/* TODO(redesign stage 6): drop these Element Plus overrides once the last
+   el-* component is gone. Kept during the migration so untouched pages do
+   not visually regress mid-flight. */
 .el-card {
   border-radius: 10px;
   border: 1px solid #ebeef5;
@@ -57,21 +155,21 @@ body {
   overflow-x: auto;
 }
 .statement code {
-  background: #f0f2f5;
+  background: var(--muted);
+  color: var(--foreground);
   padding: 2px 5px;
   border-radius: 4px;
 }
 .statement pre code {
   background: transparent;
+  color: inherit;
   padding: 0;
 }
 .statement img {
   max-width: 100%;
 }
 
-/* Element Plus tables: allow narrow screens to scroll instead of squashing.
-   why a wrapper: el-table manages its own overflow only when its container
-   is width-bounded; in fluid layouts it is not. */
+/* Narrow screens: scroll wide tables instead of squashing them. */
 .table-scroll {
   width: 100%;
   overflow-x: auto;
@@ -89,10 +187,4 @@ body {
     line-height: 1.6;
   }
   .oj-page { padding: 10px; }
-}
-
-/* Ultrawide: gently scale table type so rows read at couch distance. */
-@media (min-width: 2560px) {
-  .el-table { font-size: 15px; }
-  h2 { font-size: 22px; }
 }
