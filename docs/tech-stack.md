@@ -28,7 +28,8 @@ queue、wsq（WS 广播）、auth、model/store（GORM）、config；`pkg/sandbo
 | Vue | ^3.5 | SPA，组合式 API + `<script setup>` |
 | TypeScript | ~6.0 | 全量类型化（`vue-tsc --noEmit` 作门禁） |
 | Vite | ^8.2 | 构建/开发服务器 |
-| Element Plus | ^2.13 | 后台型 UI 组件 |
+| Tailwind CSS | ^4.1 | 原子化样式；设计令牌驱动明暗双主题 |
+| shadcn-vue (reka-ui) | ^2.3 | 无头组件 + 本地生成式 UI 组件（components/ui） |
 | Pinia | ^3.0 | 状态（auth store 等） |
 | TipTap | ^3.30 | 题面/题解所见即所得编辑器（shallowRef 持有 Editor） |
 | axios | ^1.13 | API 客户端（`src/api/client.ts` 集中封装） |

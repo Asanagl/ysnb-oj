@@ -26,7 +26,7 @@
 | 队列 | Redis Stream（dev 内存实现） | Kafka/RabbitMQ、PG 轮询 |
 | 通信 | gRPC 双向流 | HTTP 轮询、消息队列 |
 | 实时推送 | WebSocket + 主题授权 | SSE、长轮询 |
-| 前端 | Vue 3 + TS + Element Plus + TipTap | React + AntD |
+| 前端 | Vue 3 + TS + Tailwind v4 + shadcn-vue + TipTap | React + AntD |
 | 沙箱 | 自研（cgroup v2 + ns + seccomp） | go-judge、isolate、Docker |
 | 会话 | JWT + 封禁点查 | 纯服务端会话 |
 | 部署 | 单机 systemd 裸机 | Docker Compose、K8s |
@@ -107,14 +107,16 @@ WebSocket + 连接内主题订阅模型让「鉴权一次、按主题授权多�
 结构（细节见 5.1）。**什么时候反过来选**：如果只需要服务端单向推（如
 通知中心），SSE 更简单，我会用 SSE。
 
-### 2.6 前端：Vue 3 + Element Plus，而不是 React + AntD
+### 2.6 前端：Vue 3 + Tailwind v4 + shadcn-vue，而不是 React + AntD
 
-两个诚实的原因：一，团队（包括我自己）Vue 储备更厚，出活速度是硬指标；
-二，OJ 前端是**表格/表单/对话框密集**的后台型应用，Element Plus 这类
-组件的密度和中文生态直接决定开发效率，React 生态虽大但在这个具体品类
-上没有代差优势。架构上仍然做了防锁死的取舍：全部 API 调用收口在
-`client.ts` 一层、状态用 Pinia 隔离、页面组件不直接依赖 UI 库的奇特
-行为——换 UI 库或换框架时，业务逻辑层是完整的。
+这个选型迭代过一次，两次决策各自诚实：第一版选 Element Plus 是因为团队
+Vue 储备厚、出活快，且 OJ 前端是表格/表单/对话框密集的后台型应用，成熟
+组件库的密度直接决定开发效率。生产跑了一段时间后做了一次全量重构，换到
+**Tailwind CSS v4 + shadcn-vue（reka-ui 无头组件）**：要明暗双主题和长期
+可控的视觉一致性时，无头组件 + 设计令牌比「换主题变量」的路线更彻底——
+重构后 Element Plus 依赖完全移除、残留为零。两次决策都验证了同一个架构
+防锁死取舍：全部 API 调用收口在 `client.ts` 一层、状态用 Pinia 隔离、
+页面组件不直接依赖 UI 库的奇特行为——所以这次换 UI 库，业务逻辑层一行没动。
 
 富文本编辑器选 TipTap 而不是「Markdown textarea + 预览」：出题人（学生
 志愿者）不一定会 Markdown，所见即所得把出题门槛降了一档；TipTap 的

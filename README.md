@@ -3,9 +3,13 @@
 > **You Submit, Never Be rejected.**
 
 **YSNB OJ** 是一套**完全自研**的在线评测系统——Go 1.27 后端 + 自研 Linux 判题沙箱
-+ Vue 3 前端 + PostgreSQL / Redis。从校内 ACM 集训队的日常训练与比赛中长出来，
-开箱即用：ICPC / IOI 赛制、组队赛、封榜滚榜、SPJ / 交互题、多平台刷题数据聚合、
-公开 API 与 cph 桥接，一个不缺。
++ Vue 3 前端（Tailwind CSS v4 + shadcn-vue，明暗双主题）+ PostgreSQL / Redis。
+从校内 ACM 集训队的日常训练与比赛中长出来，开箱即用：ICPC / IOI 赛制、组队赛、
+封榜滚榜、SPJ / 交互题、多平台刷题数据聚合、公开 API 与 cph 桥接，一个不缺。
+
+<!-- 截图占位：从生产站点截取后放到 docs/screenshots/ 并替换下面的路径 -->
+![首页（亮色主题）](docs/screenshots/home-light.png)
+![比赛榜单（IOI 部分分 / 暗色主题）](docs/screenshots/contest-ioi-dark.png)
 
 <!-- 徽章占位：开源发布时把链接换成你的仓库地址，CI 徽章等 workflow 就绪后再启用 -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -92,7 +96,8 @@
 | 洪峰期间延迟 | API 1.9–3.9 ms；榜单计算 2.1–6.3 ms |
 | 判题稳定性 | 50-case 题 12 连跑 ×2，12/12 AC，零幻影 RE/SE |
 | 端到端回归 | 9 套 E2E 脚本 127 项断言全绿 |
-| 代码规模 | 后端 13.2k 行 Go，前端 6.1k 行 Vue/TS |
+| 代码规模 | 后端 13.2k 行 Go，前端 6.2k 行 Vue/TS |
+| 界面 | shadcn-vue + Tailwind v4，明暗双主题，移动端自适应 |
 
 ## 快速开始
 

@@ -38,7 +38,7 @@ backend/            Go 1.27 后端（cmd/api、cmd/judge 两个入口）
   internal/daemon/    判题机客户端
   pkg/sandbox/        自研沙箱（仅 Linux；seccomp_sim_test.go 是护栏测试）
   pkg/judge/          判题编排 + languages.yaml（加语言只改这里）
-frontend/           Vue3 + TS + Vite + Element Plus + TipTap
+frontend/           Vue3 + TS + Vite + Tailwind CSS v4 + shadcn-vue (reka-ui)
   src/views/          页面（ProblemEditor 全页出题器等）
   src/api/client.ts   全部后端接口的 TS 封装
 deploy/             backup.sh / restore-drill.sh / systemd 单元 / nginx.conf
