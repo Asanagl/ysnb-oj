@@ -42,13 +42,6 @@ const regTeamSelect = computed({
   },
 })
 const myCaptainedTeams = ref<{ id: number; name: string; member_count: number }[]>([])
-watch(isTeamMode, async (v) => {
-  if (!v || !auth.logged) return
-  try {
-    const all = await Teams.all()
-    myCaptainedTeams.value = all.filter((t) => t.role === 'captain')
-  } catch { /* non-fatal */ }
-}, { immediate: true })
 
 async function registerTeam() {
   if (!regTeamId.value) {
@@ -112,6 +105,14 @@ async function loadStandings() {
 }
 
 const isJudge = computed(() => data.value?.is_judge === true)
+// immediate watch 会在 setup 期间立即求值 isTeamMode，必须排在 data 声明之后（TDZ）
+watch(isTeamMode, async (v) => {
+  if (!v || !auth.logged) return
+  try {
+    const all = await Teams.all()
+    myCaptainedTeams.value = all.filter((t) => t.role === 'captain')
+  } catch { /* non-fatal */ }
+}, { immediate: true })
 const boardMode = computed<'acm' | 'ioi'>(() => (data.value?.contest.mode === 'ioi' ? 'ioi' : 'acm'))
 const contestFrozenNow = computed(() => {
   if (!data.value) return false
