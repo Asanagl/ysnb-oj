@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { Submissions } from '../api/client'
 import StatusTag from '../components/StatusTag.vue'
@@ -16,6 +16,8 @@ import {
 
 const route = useRoute()
 const sub = ref<Awaited<ReturnType<typeof Submissions.get>> | null>(null)
+// IOI problems: per-case partial scores ride on CaseResult.score
+const hasCaseScore = computed(() => sub.value?.cases.some((c) => c.score !== undefined) ?? false)
 
 onMounted(async () => {
   sub.value = await Submissions.get(route.params.id as string)
@@ -28,6 +30,9 @@ onMounted(async () => {
       <CardTitle class="flex flex-wrap items-center gap-2 text-lg">
         提交 #{{ sub.id }} · 题目 #{{ sub.problem_id }}
         <StatusTag :status="sub.status" />
+        <span v-if="sub.score !== undefined" class="font-mono text-sm text-muted-foreground">
+          得分 {{ sub.score }}
+        </span>
       </CardTitle>
       <CardDescription>
         语言 {{ sub.language }} · 耗时 {{ sub.time_ms }} ms · 内存 {{ sub.memory_kb }} KB ·
@@ -44,6 +49,7 @@ onMounted(async () => {
           <TableRow>
             <TableHead class="w-[70px]">#</TableHead>
             <TableHead>状态</TableHead>
+            <TableHead v-if="hasCaseScore" class="w-[90px]">得分</TableHead>
             <TableHead class="w-[110px]">耗时</TableHead>
             <TableHead class="w-[110px]">内存</TableHead>
             <TableHead>信息</TableHead>
@@ -53,6 +59,7 @@ onMounted(async () => {
           <TableRow v-for="c in sub.cases" :key="c.index">
             <TableCell>{{ c.index }}</TableCell>
             <TableCell><StatusTag :status="c.status" /></TableCell>
+            <TableCell v-if="hasCaseScore" class="font-mono">{{ c.score ?? '' }}</TableCell>
             <TableCell>{{ c.time_ms }} ms</TableCell>
             <TableCell>{{ c.mem_kb }} KB</TableCell>
             <TableCell>{{ c.message }}</TableCell>
