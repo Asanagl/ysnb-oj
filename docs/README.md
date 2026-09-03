@@ -28,6 +28,7 @@
 | [`user-guide.md`](user-guide.md) | 选手手册 | 用户可见功能变动 |
 | [`interactive.md`](interactive.md) | SPJ checker / 交互 interactor 的调用约定与出题工具链对接（题目包格式细节） | 判题约定变动 |
 | [`showcase.md`](showcase.md) | 个人项目技术总结（面试/简历用，**完全脱敏可外发**）：技术栈权衡、沙箱/调度/前后端难点叙事、量化成果 | 简历项目经历变化时 |
+| [`launch-readiness.md`](launch-readiness.md) | 开源上线 readiness 清单：安全/文档/仓库/生产四区逐项状态、已知缺口与修复方案 | 上线前后、重大变更后 |
 | [`e2e-report.md`](e2e-report.md) | 历轮 E2E 与验收记录（压测基线在 §16.1） | 每轮测试后追加 |
 | [`security-audit.md`](security-audit.md) | 历轮安全审计与处置记录 | 每轮审计后追加 |
 | [`cloud-test-report.md`](cloud-test-report.md) | 早期云端联调报告（历史存档） | 不再更新 |
