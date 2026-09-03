@@ -1,4 +1,4 @@
-import { ref, watchEffect } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 
 export type Theme = 'light' | 'dark' | 'system'
 
@@ -17,10 +17,12 @@ watchEffect(() => {
   document.documentElement.classList.toggle('dark', dark)
 })
 
+const isDark = computed(() => theme.value === 'dark' || (theme.value === 'system' && systemDark.value))
+
 export function useTheme() {
   function setTheme(next: Theme) {
     theme.value = next
     localStorage.setItem(STORAGE_KEY, next)
   }
-  return { theme, setTheme }
+  return { theme, isDark, setTheme }
 }

@@ -3,13 +3,23 @@ import type { StandingRow } from '../api/client'
 
 // CF-style scoreboard grid shared by the contest page and the projection
 // screen. `large` switches to projection scale (meters-away readable).
-defineProps<{
-  rows: StandingRow[]
-  problems: { label: string }[]
-  large?: boolean
-}>()
+//
+// mode fork (backend contract, see computeIOIStandings in
+// backend/internal/handler/contests.go): in IOI contests penalty_ms carries
+// the row's TOTAL SCORE and each cell's solved_ms holds that problem's best
+// partial score; in ACM they are penalty time / solve time in milliseconds.
+// pending masks post-freeze submissions in both modes — never reveal early.
+const props = withDefaults(
+  defineProps<{
+    rows: StandingRow[]
+    problems: { label: string }[]
+    large?: boolean
+    mode?: 'acm' | 'ioi'
+  }>(),
+  { mode: 'acm' },
+)
 
-function cellClass(cell?: { solved: boolean; attempts: number; pending: number }) {
+function cellClass(cell?: { solved: boolean; attempts: number; pending: number; solved_ms: number }) {
   if (!cell) return ''
   if (cell.solved) return 'ok'
   if (cell.pending) return 'pend'
@@ -22,74 +32,96 @@ function rankText(row: StandingRow) {
   if (row.starred) return '★'
   return String(row.rank)
 }
+
+// IOI cells without any judged attempt and without pending show nothing;
+// a judged-but-zero-score attempt shows 0 explicitly (partial credit matters).
+function ioiCellScore(cell: { attempts: number; solved_ms: number }) {
+  return cell.attempts > 0 ? String(cell.solved_ms) : ''
+}
 </script>
 
 <template>
   <div>
     <div class="b-legendbar">
-      <span class="b-legend"><span class="b-legend-chip ok" /> AC（用时'）</span>
-      <span class="b-legend"><span class="b-legend-chip fail" /> -失败次数</span>
+      <span class="b-legend">
+        <span class="b-legend-chip ok" /> {{ props.mode === 'ioi' ? '满分' : 'AC（用时\'）' }}
+      </span>
+      <span class="b-legend">
+        <span class="b-legend-chip fail" /> {{ props.mode === 'ioi' ? '部分分/未过' : '-失败次数' }}
+      </span>
       <span class="b-legend"><span class="b-legend-chip pend" /> ?待判/冻结</span>
       <span class="b-legend-note">★ 打星不占名次 · 红名为作弊</span>
     </div>
     <div class="board" :class="{ large }" :style="{ '--n': problems.length }">
-    <div class="b-row b-head">
-      <div class="b-rank">#</div>
-      <div class="b-user">用户</div>
-      <div class="b-solved">解题</div>
-      <div class="b-penalty">罚时</div>
-      <div v-for="p in problems" :key="p.label" class="b-cell">{{ p.label }}</div>
-    </div>
-    <div
-      v-for="row in rows"
-      :key="row.user_id"
-      class="b-row"
-      :class="{ 'b-cheat': row.cheated, 'b-star': row.starred }"
-    >
-      <div class="b-rank">{{ rankText(row) }}</div>
-      <div class="b-user">
-        <router-link :to="`/users/${row.user_id}`" class="b-user-link">
-          <template v-if="row.cheated">🚩 {{ row.username || row.user_id }}</template>
-          <template v-else-if="row.starred">★ {{ row.username || row.user_id }}</template>
-          <template v-else>{{ row.username || row.user_id }}</template>
-        </router-link>
-      </div>
-      <div class="b-solved">{{ row.solved }}</div>
-      <div class="b-penalty">
-        {{ Math.round(row.penalty_ms / 60000) }}<span class="b-penalty-unit">分</span>
+      <div class="b-row b-head">
+        <div class="b-rank">#</div>
+        <div class="b-user">用户</div>
+        <div class="b-solved">{{ props.mode === 'ioi' ? '满分题' : '解题' }}</div>
+        <div class="b-penalty">{{ props.mode === 'ioi' ? '总分' : '罚时' }}</div>
+        <div v-for="p in problems" :key="p.label" class="b-cell">{{ p.label }}</div>
       </div>
       <div
-        v-for="p in problems"
-        :key="p.label"
-        class="b-cell"
-        :class="cellClass(row.cells[p.label])"
+        v-for="row in rows"
+        :key="row.user_id"
+        class="b-row"
+        :class="{ 'b-cheat': row.cheated, 'b-star': row.starred }"
       >
-        <template v-if="row.cells[p.label]">
-          <span v-if="row.cells[p.label].attempts" class="b-att">
-            -{{ row.cells[p.label].attempts }}
-          </span>
-          <span v-if="row.cells[p.label].solved" class="b-time">
-            +{{ Math.round(row.cells[p.label].solved_ms / 60000) }}'
-          </span>
-          <span v-if="row.cells[p.label].pending" class="b-pend">
-            ?{{ row.cells[p.label].pending }}
-          </span>
-        </template>
+        <div class="b-rank">{{ rankText(row) }}</div>
+        <div class="b-user">
+          <router-link :to="`/users/${row.user_id}`" class="b-user-link">
+            <template v-if="row.cheated">🚩 {{ row.username || row.user_id }}</template>
+            <template v-else-if="row.starred">★ {{ row.username || row.user_id }}</template>
+            <template v-else>{{ row.username || row.user_id }}</template>
+          </router-link>
+        </div>
+        <div class="b-solved">{{ row.solved }}</div>
+        <div class="b-penalty">
+          <template v-if="props.mode === 'ioi'">{{ row.penalty_ms }}</template>
+          <template v-else>
+            {{ Math.round(row.penalty_ms / 60000) }}<span class="b-penalty-unit">分</span>
+          </template>
+        </div>
+        <div
+          v-for="p in problems"
+          :key="p.label"
+          class="b-cell"
+          :class="cellClass(row.cells[p.label])"
+        >
+          <template v-if="row.cells[p.label]">
+            <template v-if="props.mode === 'ioi'">
+              <span class="b-time">{{ ioiCellScore(row.cells[p.label]) }}</span>
+              <span v-if="row.cells[p.label].pending" class="b-pend">
+                ?{{ row.cells[p.label].pending }}
+              </span>
+            </template>
+            <template v-else>
+              <span v-if="row.cells[p.label].attempts" class="b-att">
+                -{{ row.cells[p.label].attempts }}
+              </span>
+              <span v-if="row.cells[p.label].solved" class="b-time">
+                +{{ Math.round(row.cells[p.label].solved_ms / 60000) }}'
+              </span>
+              <span v-if="row.cells[p.label].pending" class="b-pend">
+                ?{{ row.cells[p.label].pending }}
+              </span>
+            </template>
+          </template>
+        </div>
       </div>
-    </div>
-    <div v-if="rows.length === 0" class="b-empty">暂无有效提交</div>
+      <div v-if="rows.length === 0" class="b-empty">暂无有效提交</div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* Light theme (default): matches the Element Plus palette used site-wide.
-   The projection tier (.large) re-covers with the dark high-contrast board. */
+/* Colors come from the design tokens (style.css) so the board follows the
+   light/dark theme; the projection tier (.large) stays fixed dark because it
+   targets venue screens, not the page theme. */
 .board {
   --cell: 56px;
-  background: #fff;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
   padding: 10px;
   overflow-x: auto;
 }
@@ -103,10 +135,10 @@ function rankText(row: StandingRow) {
   border-radius: 6px;
 }
 .b-row:nth-child(odd):not(.b-head) {
-  background: #fafafa;
+  background: var(--muted);
 }
 .b-head {
-  color: #909399;
+  color: var(--muted-foreground);
   font-size: 12px;
   text-transform: uppercase;
 }
@@ -117,32 +149,33 @@ function rankText(row: StandingRow) {
   text-align: center;
 }
 .b-solved {
-  color: #67c23a;
+  color: var(--ac);
   font-size: 18px;
   font-weight: 700;
 }
 .b-penalty {
-  color: #303133;
+  color: var(--foreground);
   font-size: 16px;
   font-weight: 600;
+  font-family: var(--font-mono);
 }
 .b-penalty-unit {
   font-size: 11px;
-  color: #909399;
+  color: var(--muted-foreground);
   margin-left: 2px;
 }
 .b-user-link {
-  color: #303133;
+  color: var(--foreground);
   text-decoration: none;
 }
 .b-user-link:hover {
-  color: #409eff;
+  color: var(--primary);
 }
 .b-cheat .b-user-link {
-  color: #f56c6c;
+  color: var(--wa);
 }
 .b-star .b-user-link {
-  color: #e6a23c;
+  color: var(--tle);
 }
 .b-cell {
   min-height: 34px;
@@ -151,28 +184,30 @@ function rankText(row: StandingRow) {
   justify-content: center;
   gap: 4px;
   border-radius: 5px;
-  background: #f5f7fa;
+  background: var(--muted);
+  color: var(--foreground);
   font-size: 13px;
   font-weight: 600;
+  font-family: var(--font-mono);
 }
 .b-cell.ok {
-  background: #67c23a;
+  background: var(--ac);
   color: #fff;
 }
 .b-cell.fail {
-  background: rgba(245, 108, 108, 0.14);
-  color: #f56c6c;
+  background: var(--wa-bg);
+  color: var(--wa);
 }
 .b-cell.pend {
-  background: rgba(230, 162, 60, 0.18);
-  color: #e6a23c;
+  background: var(--tle-bg);
+  color: var(--tle);
 }
 .b-att {
   font-size: 11px;
   opacity: 0.85;
 }
 .b-empty {
-  color: #909399;
+  color: var(--muted-foreground);
   text-align: center;
   padding: 16px;
 }
@@ -188,11 +223,11 @@ function rankText(row: StandingRow) {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #909399;
+  color: var(--muted-foreground);
 }
 .b-legend-note {
   font-size: 12px;
-  color: #909399;
+  color: var(--muted-foreground);
 }
 .b-legend-chip {
   width: 14px;
@@ -201,13 +236,15 @@ function rankText(row: StandingRow) {
   display: inline-block;
 }
 .b-legend-chip.ok {
-  background: #67c23a;
+  background: var(--ac);
 }
 .b-legend-chip.fail {
-  background: rgba(245, 108, 108, 0.4);
+  background: var(--wa-bg);
+  border: 1px solid var(--wa);
 }
 .b-legend-chip.pend {
-  background: rgba(230, 162, 60, 0.45);
+  background: var(--tle-bg);
+  border: 1px solid var(--tle);
 }
 @media (max-width: 767.98px) {
   .board {
@@ -218,7 +255,7 @@ function rankText(row: StandingRow) {
   }
 }
 
-/* Projection tier: dark, meters-away readability. */
+/* Projection tier: dark, meters-away readability (theme-independent). */
 .board.large {
   --cell: 96px;
   background: #0d1117;
@@ -275,6 +312,7 @@ function rankText(row: StandingRow) {
   font-size: 22px;
   border-radius: 8px;
   background: #161b22;
+  color: #e6edf3;
 }
 .board.large .b-cell.ok {
   background: #1f6f43;

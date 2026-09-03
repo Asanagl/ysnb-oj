@@ -96,17 +96,18 @@ const buttons = [
 
 <style scoped>
 .wysiwyg {
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
+  border: 1px solid var(--input);
+  border-radius: 8px;
   overflow: hidden;
+  background: var(--card);
 }
 .wysiwyg-toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
   padding: 6px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #ebeef5;
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
 }
 .wys-btn {
   border: 1px solid transparent;
@@ -115,14 +116,15 @@ const buttons = [
   padding: 4px 10px;
   cursor: pointer;
   font-size: 13px;
-  color: #606266;
+  color: var(--muted-foreground);
 }
 .wys-btn:hover {
-  background: #ecf5ff;
+  background: var(--accent-soft);
+  color: var(--primary);
 }
 .wys-btn.on {
-  background: #409eff;
-  color: #fff;
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 .wysiwyg-body :deep(.wysiwyg-content) {
   min-height: 220px;
@@ -130,10 +132,11 @@ const buttons = [
   outline: none;
   font-size: 14px;
   line-height: 1.7;
+  color: var(--foreground);
 }
 .wysiwyg-body :deep(.wysiwyg-content p.is-editor-empty:first-child)::before {
   content: attr(data-placeholder);
-  color: #c0c4cc;
+  color: var(--muted-foreground);
   float: left;
   height: 0;
   pointer-events: none;
@@ -148,9 +151,9 @@ const buttons = [
   max-width: 100%;
 }
 .wysiwyg-body :deep(.wysiwyg-content blockquote) {
-  border-left: 3px solid #409eff;
+  border-left: 3px solid var(--primary);
   padding-left: 12px;
-  color: #606266;
+  color: var(--muted-foreground);
   margin-left: 0;
 }
 </style>

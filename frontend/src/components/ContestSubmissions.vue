@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { Submissions, errMsg } from '../api/client'
+import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import StatusTag from './StatusTag.vue'
 
 // Contest-scoped submission feed. During a running contest the backend
@@ -27,7 +37,7 @@ async function toggleCancel(id: number, cancelled: boolean) {
     await Submissions.cancelContestSubmission(props.cid, id, cancelled)
     await load()
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -36,7 +46,7 @@ async function rejudgeOne(id: number) {
     await Submissions.rejudgeContestSubmission(props.cid, id)
     await load()
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -51,54 +61,62 @@ onBeforeUnmount(() => {
 
 <template>
   <div>
-    <div style="margin-bottom: 8px; display: flex; gap: 12px; align-items: center">
-      <el-button size="small" @click="load">刷新</el-button>
-      <el-switch
-        v-if="isJudge && frozen"
-        v-model="showTruth"
-        active-text="裁判视图（显示真实判定）"
-        inactive-text="遮罩视图"
-      />
-      <span style="color: #909399; font-size: 12px">
+    <div class="mb-2 flex flex-wrap items-center gap-3">
+      <Button size="sm" variant="outline" @click="load">刷新</Button>
+      <label v-if="isJudge && frozen" class="flex items-center gap-2 text-sm">
+        <Switch v-model="showTruth" />
+        {{ showTruth ? '裁判视图（显示真实判定）' : '遮罩视图' }}
+      </label>
+      <span class="text-xs text-muted-foreground">
         每 10 秒自动刷新；赛后提交为补题，不影响赛时榜单；被取消的提交计分为零
       </span>
     </div>
-    <el-table :data="items" size="small">
-      <el-table-column label="#" prop="id" width="70" />
-      <el-table-column label="用户" width="90">
-        <template #default="{ row }">
-          <router-link :to="`/users/${row.user_id}`" style="color: #409eff; text-decoration: none">
-            {{ row.user_id }}
-          </router-link>
-        </template>
-      </el-table-column>
-      <el-table-column label="题目" prop="problem_id" width="80" />
-      <el-table-column label="状态" width="110">
-        <template #default="{ row }">
-          <StatusTag :status="row.cancelled ? '已取消' : row.status" />
-        </template>
-      </el-table-column>
-      <el-table-column label="耗时" width="90">
-        <template #default="{ row }">{{ row.time_ms }} ms</template>
-      </el-table-column>
-      <el-table-column label="内存" width="100">
-        <template #default="{ row }">{{ row.memory_kb }} KB</template>
-      </el-table-column>
-      <el-table-column label="语言" prop="language" width="90" />
-      <el-table-column label="补题" width="70">
-        <template #default="{ row }">{{ row.is_practice ? '是' : '' }}</template>
-      </el-table-column>
-      <el-table-column label="提交时间" min-width="150">
-        <template #default="{ row }">{{ new Date(row.created_at).toLocaleString() }}</template>
-      </el-table-column>
-      <el-table-column v-if="isJudge" label="裁判" width="190">
-        <template #default="{ row }">
-          <el-button size="small" @click="rejudgeOne(row.id)">重判</el-button>
-          <el-button size="small" :type="row.cancelled ? 'success' : 'danger'" @click="toggleCancel(row.id, !row.cancelled)">
-            {{ row.cancelled ? '恢复' : '取消' }}
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead class="w-16">#</TableHead>
+          <TableHead>用户</TableHead>
+          <TableHead>题目</TableHead>
+          <TableHead>状态</TableHead>
+          <TableHead>耗时</TableHead>
+          <TableHead>内存</TableHead>
+          <TableHead>语言</TableHead>
+          <TableHead>补题</TableHead>
+          <TableHead>提交时间</TableHead>
+          <TableHead v-if="isJudge">裁判</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow v-for="row in items" :key="row.id">
+          <TableCell class="font-mono">{{ row.id }}</TableCell>
+          <TableCell>
+            <router-link :to="`/users/${row.user_id}`" class="text-primary hover:underline">
+              {{ row.user_id }}
+            </router-link>
+          </TableCell>
+          <TableCell class="font-mono">{{ row.problem_id }}</TableCell>
+          <TableCell>
+            <StatusTag :status="row.cancelled ? '已取消' : row.status" />
+          </TableCell>
+          <TableCell class="font-mono">{{ row.time_ms }} ms</TableCell>
+          <TableCell class="font-mono">{{ row.memory_kb }} KB</TableCell>
+          <TableCell>{{ row.language }}</TableCell>
+          <TableCell>{{ row.is_practice ? '是' : '' }}</TableCell>
+          <TableCell>{{ new Date(row.created_at).toLocaleString() }}</TableCell>
+          <TableCell v-if="isJudge">
+            <div class="flex gap-2">
+              <Button size="sm" variant="outline" @click="rejudgeOne(row.id)">重判</Button>
+              <Button
+                size="sm"
+                :variant="row.cancelled ? 'secondary' : 'destructive'"
+                @click="toggleCancel(row.id, !row.cancelled)"
+              >
+                {{ row.cancelled ? '恢复' : '取消' }}
+              </Button>
+            </div>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
   </div>
 </template>
