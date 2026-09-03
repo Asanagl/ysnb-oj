@@ -2,8 +2,14 @@
 // 题单编辑器（新建/编辑共用）：标题+描述+题目顺序列表（可搜索添加/删除/上下移动）。
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { Lists, Problems } from '../api/client'
+import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { FormField } from '@/components/ui/form-field'
+import { Empty } from '@/components/ui/empty'
 
 const route = useRoute()
 const router = useRouter()
@@ -32,7 +38,7 @@ async function search() {
 
 function addProblem(p: { id: number; title: string }) {
   if (items.value.some((i) => i.problem_id === p.id)) {
-    ElMessage.warning('该题目已在题单中')
+    toast.warning('该题目已在题单中')
     return
   }
   items.value.push({ problem_id: p.id, title: p.title, note: '' })
@@ -51,7 +57,7 @@ function move(i: number, dir: -1 | 1) {
 
 async function save() {
   if (!title.value.trim()) {
-    ElMessage.warning('标题不能为空')
+    toast.warning('标题不能为空')
     return
   }
   saving.value = true
@@ -64,15 +70,15 @@ async function save() {
     }
     if (listId.value) {
       await Lists.update(listId.value, payload)
-      ElMessage.success('已保存')
+      toast.success('已保存')
     } else {
       const created = await Lists.create(payload)
-      ElMessage.success('题单已创建')
+      toast.success('题单已创建')
       router.replace(`/lists/${created.id}/edit`)
     }
     router.push(`/lists/${listId.value || ''}`)
   } catch (e) {
-    ElMessage.error((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? String(e))
+    toast.error((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? String(e))
   } finally {
     saving.value = false
   }
@@ -80,92 +86,70 @@ async function save() {
 </script>
 
 <template>
-  <div class="le-root">
-    <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px">
-      <h3 style="margin: 0">{{ listId ? `编辑题单 #${listId}` : '新建题单' }}</h3>
-      <span style="flex: 1" />
-      <el-button @click="router.back()">返回</el-button>
-      <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+  <div class="mx-auto max-w-[1400px]">
+    <div class="mb-3 flex items-center gap-3">
+      <h3 class="m-0">{{ listId ? `编辑题单 #${listId}` : '新建题单' }}</h3>
+      <span class="flex-1" />
+      <Button variant="outline" @click="router.back()">返回</Button>
+      <Button :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存' }}</Button>
     </div>
 
-    <el-card shadow="never" style="margin-bottom: 16px">
-      <el-form label-position="top">
-        <el-form-item label="题单标题">
-          <el-input v-model="title" placeholder="例如：2026 秋季新生周练 #1" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="description" type="textarea" :rows="2" />
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <Card class="mb-4">
+      <CardContent class="p-6">
+        <div class="flex flex-col gap-4">
+          <FormField label="题单标题">
+            <Input v-model="title" placeholder="例如：2026 秋季新生周练 #1" />
+          </FormField>
+          <FormField label="描述">
+            <Textarea v-model="description" :rows="2" />
+          </FormField>
+        </div>
+      </CardContent>
+    </Card>
 
-    <el-row :gutter="16">
-      <el-col :xs="24" :md="10">
-        <el-card shadow="never">
-          <h4 style="margin-top: 0">添加题目</h4>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px">
-            <el-input v-model="searchKw" placeholder="按标题搜索题库" @keyup.enter="search" />
-            <el-button @click="search">搜索</el-button>
-          </div>
-          <div v-for="p in searchResults" :key="p.id" class="le-search-row">
-            <span>#{{ p.id }} {{ p.title }}</span>
-            <el-button size="small" type="primary" text @click="addProblem(p)">添加</el-button>
-          </div>
-          <el-empty v-if="searchResults.length === 0" description="搜索后点添加" :image-size="60" />
-        </el-card>
-      </el-col>
-      <el-col :xs="24" :md="14">
-        <el-card shadow="never">
-          <h4 style="margin-top: 0">题目列表（{{ items.length }}）</h4>
-          <div v-for="(it, i) in items" :key="it.problem_id" class="le-item-row">
-            <span class="le-idx">{{ i + 1 }}</span>
-            <span class="le-title">#{{ it.problem_id }} {{ it.title }}</span>
-            <el-input v-model="it.note" size="small" placeholder="备注（如：必做/week1）" style="width: 160px" />
-            <el-button size="small" text :disabled="i === 0" @click="move(i, -1)">↑</el-button>
-            <el-button size="small" text :disabled="i === items.length - 1" @click="move(i, 1)">↓</el-button>
-            <el-button size="small" type="danger" text @click="removeAt(i)">移除</el-button>
-          </div>
-          <el-empty v-if="items.length === 0" description="从左侧搜索并添加题目" :image-size="60" />
-        </el-card>
-      </el-col>
-    </el-row>
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-12">
+      <div class="md:col-span-5">
+        <Card>
+          <CardContent class="p-6">
+            <h4 class="mb-3 mt-0">添加题目</h4>
+            <div class="mb-2 flex gap-2">
+              <Input v-model="searchKw" placeholder="按标题搜索题库" @keyup.enter="search" />
+              <Button variant="secondary" @click="search">搜索</Button>
+            </div>
+            <div
+              v-for="p in searchResults"
+              :key="p.id"
+              class="flex items-center justify-between border-b border-border px-1 py-1.5"
+            >
+              <span>#{{ p.id }} {{ p.title }}</span>
+              <Button variant="ghost" size="sm" class="text-primary" @click="addProblem(p)">添加</Button>
+            </div>
+            <Empty v-if="searchResults.length === 0" description="搜索后点添加" class="py-6" />
+          </CardContent>
+        </Card>
+      </div>
+      <div class="md:col-span-7">
+        <Card>
+          <CardContent class="p-6">
+            <h4 class="mb-3 mt-0">题目列表（{{ items.length }}）</h4>
+            <div
+              v-for="(it, i) in items"
+              :key="it.problem_id"
+              class="flex items-center gap-2 border-b border-border py-1.5"
+            >
+              <span class="w-7 text-right text-muted-foreground">{{ i + 1 }}</span>
+              <span class="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
+                >#{{ it.problem_id }} {{ it.title }}</span
+              >
+              <Input v-model="it.note" placeholder="备注（如：必做/week1）" class="h-8 w-40 text-xs" />
+              <Button variant="ghost" size="sm" :disabled="i === 0" @click="move(i, -1)">↑</Button>
+              <Button variant="ghost" size="sm" :disabled="i === items.length - 1" @click="move(i, 1)">↓</Button>
+              <Button variant="ghost" size="sm" class="text-destructive" @click="removeAt(i)">移除</Button>
+            </div>
+            <Empty v-if="items.length === 0" description="从左侧搜索并添加题目" class="py-6" />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.le-root {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-.le-search-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 4px;
-  border-bottom: 1px solid #f0f2f5;
-}
-.le-item-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 0;
-  border-bottom: 1px solid #f0f2f5;
-}
-.le-idx {
-  width: 28px;
-  color: #909399;
-  text-align: right;
-}
-.le-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-@media (max-width: 991.98px) {
-  .el-col + .el-col {
-    margin-top: 16px;
-  }
-}
-</style>

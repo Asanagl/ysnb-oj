@@ -112,21 +112,6 @@ body {
   transition: background 0.2s, color 0.2s;
 }
 
-/* TODO(redesign stage 6): drop these Element Plus overrides once the last
-   el-* component is gone. Kept during the migration so untouched pages do
-   not visually regress mid-flight. */
-.el-card {
-  border-radius: 10px;
-  border: 1px solid #ebeef5;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
-.el-button--primary {
-  --el-button-border-color: #409eff;
-}
-.el-table {
-  --el-table-border-color: #ebeef5;
-}
-
 /* Fluid content: full width with sane gutters; on ultrawide cap the line
    length so text does not span 3000px+. Pages choose their own inner grids. */
 .oj-page {
@@ -179,7 +164,7 @@ body {
 /* Touch devices: bigger hit areas and a larger editor font for thumb typing.
    why (hover:none)+(pointer:coarse): detects real touch capability, not UA. */
 @media (hover: none) and (pointer: coarse) {
-  .el-button {
+  button {
     min-height: 44px;
   }
   .cm-editor .cm-content {

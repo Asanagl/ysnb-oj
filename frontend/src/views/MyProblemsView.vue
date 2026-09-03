@@ -3,8 +3,22 @@
 // 新建/编辑统一跳转独立全页编辑器（大视窗），保存后回到本页。
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { MyProblems, errMsg } from '../api/client'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Empty } from '@/components/ui/empty'
+import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 
 const router = useRouter()
 const problems = ref<Awaited<ReturnType<typeof MyProblems.list>>>([])
@@ -15,8 +29,8 @@ const statusText: Record<string, string> = {
   rejected: '已驳回（可修改重投）',
   draft: '草稿',
 }
-const statusType = (s: string) =>
-  s === 'approved' ? 'success' : s === 'rejected' ? 'danger' : 'info'
+const statusVariant = (s: string) =>
+  s === 'approved' ? 'ac' : s === 'rejected' ? 'destructive' : 'secondary'
 
 async function load() {
   problems.value = await MyProblems.list()
@@ -33,57 +47,69 @@ function openEdit(row: { id: number }) {
 
 // 驳回后一键重投（不进编辑器，直接把状态送回 pending）
 async function resubmit(row: { id: number; title: string }) {
+  if (!(await confirmDialog({ title: '按当前内容重新提交审核？' }))) return
   try {
     await MyProblems.update(row.id, { resubmit: true })
-    ElMessage.success(`《${row.title}》已重新提交审核`)
+    toast.success(`《${row.title}》已重新提交审核`)
     await load()
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 </script>
 
 <template>
-  <el-card>
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
-      <h3 style="margin: 0">我的题目</h3>
-      <el-button type="primary" @click="openCreate">新建题目</el-button>
-    </div>
-    <el-alert
-      title="新建题目默认隐藏，管理员审核通过后会出现在公开题库；被驳回可修改后重新提交"
-      type="info"
-      :closable="false"
-      style="margin-bottom: 12px"
-    />
-    <el-table :data="problems" size="small">
-      <el-table-column label="#" prop="id" width="70" />
-      <el-table-column label="标题" prop="title" />
-      <el-table-column label="状态" width="140">
-        <template #default="{ row }">
-          <el-tag :type="statusType(row.review_status)">{{ statusText[row.review_status] ?? row.review_status }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="170">
-        <template #default="{ row }">
-          <el-button
-            v-if="row.review_status !== 'approved'"
-            size="small"
-            @click="openEdit(row)"
-          >
-            编辑
-          </el-button>
-          <el-popconfirm
-            v-if="row.review_status === 'rejected'"
-            title="按当前内容重新提交审核？"
-            @confirm="resubmit(row)"
-          >
-            <template #reference>
-              <el-button size="small" type="primary" text>重投</el-button>
-            </template>
-          </el-popconfirm>
-        </template>
-      </el-table-column>
-    </el-table>
-    <el-empty v-if="problems.length === 0" description="还没有出过题，点右上角新建" />
-  </el-card>
+  <Card>
+    <CardHeader class="flex flex-row items-center justify-between space-y-0">
+      <CardTitle>我的题目</CardTitle>
+      <Button @click="openCreate">新建题目</Button>
+    </CardHeader>
+    <CardContent>
+      <Alert variant="info" class="mb-3">
+        新建题目默认隐藏，管理员审核通过后会出现在公开题库；被驳回可修改后重新提交
+      </Alert>
+      <Table v-if="problems.length > 0">
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-[70px]">#</TableHead>
+            <TableHead>标题</TableHead>
+            <TableHead class="w-[140px]">状态</TableHead>
+            <TableHead class="w-[170px]">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow v-for="row in problems" :key="row.id">
+            <TableCell>{{ row.id }}</TableCell>
+            <TableCell>{{ row.title }}</TableCell>
+            <TableCell>
+              <Badge :variant="statusVariant(row.review_status)">
+                {{ statusText[row.review_status] ?? row.review_status }}
+              </Badge>
+            </TableCell>
+            <TableCell>
+              <div class="flex gap-2">
+                <Button
+                  v-if="row.review_status !== 'approved'"
+                  size="sm"
+                  variant="outline"
+                  @click="openEdit(row)"
+                >
+                  编辑
+                </Button>
+                <Button
+                  v-if="row.review_status === 'rejected'"
+                  size="sm"
+                  variant="link"
+                  @click="resubmit(row)"
+                >
+                  重投
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <Empty v-else description="还没有出过题，点右上角新建" />
+    </CardContent>
+  </Card>
 </template>

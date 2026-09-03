@@ -1,8 +1,37 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { Admin, errMsg } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { NumberInput } from '@/components/ui/number-input'
+import { Badge } from '@/components/ui/badge'
+import { FormField } from '@/components/ui/form-field'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 const auth = useAuthStore()
 const users = ref<Awaited<ReturnType<typeof Admin.users>>>([])
@@ -41,10 +70,10 @@ async function onImport(e: Event) {
   try {
     const r = await Admin.importUsers(file)
     importRows.value = r.rows
-    ElMessage.success(`导入成功 ${r.created} 人`)
+    toast.success(`导入成功 ${r.created} 人`)
     await load()
   } catch (err) {
-    ElMessage.error(errMsg(err))
+    toast.error(errMsg(err))
   }
 }
 
@@ -56,198 +85,261 @@ function openEdit(row: { id: number; username: string; student_no: string; nickn
 async function saveEdit() {
   try {
     await Admin.updateUser(editForm.id, editForm.student_no, editForm.nickname)
-    ElMessage.success('已保存')
+    toast.success('已保存')
     editDialog.value = false
     await load()
   } catch (err) {
-    ElMessage.error(errMsg(err))
+    toast.error(errMsg(err))
   }
 }
 
 async function doResetPassword(row: { id: number; username: string }) {
+  if (!(await confirmDialog({ title: '重置该用户密码？', danger: true }))) return
   try {
     const r = await Admin.resetPassword(row.id)
     newPasswords.value.push({ username: row.username, password: r.password })
-    ElMessage.success('密码已重置，见右侧弹窗')
+    toast.success('密码已重置，见右侧弹窗')
   } catch (err) {
-    ElMessage.error(errMsg(err))
+    toast.error(errMsg(err))
   }
 }
 
 // 角色修改：admin 走 /role（user↔setter），super_admin 走 /role/super
 async function onRoleChange(row: { id: number; username: string; role: string }, role: string) {
   if (role === row.role) return
+  if (
+    !(await confirmDialog({
+      title: `将 ${row.username} 的角色改为 ${roleLabel(role)}？`,
+      danger: true,
+    }))
+  )
+    return
   const action = auth.isSuperAdmin ? () => Admin.setSuperRole(row.id, role) : () => Admin.setRole(row.id, role)
   try {
     await action()
-    ElMessage.success(`已将 ${row.username} 的角色改为 ${roleLabel(role)}`)
+    toast.success(`已将 ${row.username} 的角色改为 ${roleLabel(role)}`)
     await load()
   } catch (err) {
-    ElMessage.error(errMsg(err))
+    toast.error(errMsg(err))
     await load()
   }
 }
 
 async function onBanToggle(row: { id: number; username: string; banned: boolean }) {
   const next = !row.banned
+  if (
+    !(await confirmDialog({
+      title: next ? `封禁 ${row.username}？` : `解封 ${row.username}？`,
+      description: next ? '封禁后立即无法登录' : undefined,
+      danger: true,
+    }))
+  )
+    return
   try {
     await Admin.setBan(row.id, next)
-    ElMessage.success(next ? `已封禁 ${row.username}` : `已解封 ${row.username}`)
+    toast.success(next ? `已封禁 ${row.username}` : `已解封 ${row.username}`)
     await load()
   } catch (err) {
-    ElMessage.error(errMsg(err))
+    toast.error(errMsg(err))
   }
 }
 
 async function createInvite() {
   try {
     await Admin.createInvite(inviteForm.value)
-    ElMessage.success('邀请码已生成')
+    toast.success('邀请码已生成')
     await load()
   } catch (err) {
-    ElMessage.error(errMsg(err))
+    toast.error(errMsg(err))
   }
 }
 
 // 删除邀请码：只影响后续注册，已注册账号不受影响（提示里已说明）
 async function deleteInvite(row: { id: number; code: string }) {
+  if (
+    !(await confirmDialog({
+      title: '删除该邀请码？',
+      description: '已注册用户不受影响',
+      danger: true,
+    }))
+  )
+    return
   try {
     await Admin.deleteInvite(row.id)
-    ElMessage.success(`邀请码 ${row.code} 已删除`)
+    toast.success(`邀请码 ${row.code} 已删除`)
     await load()
   } catch (err) {
-    ElMessage.error(errMsg(err))
+    toast.error(errMsg(err))
   }
 }
 </script>
 
 <template>
-  <el-card>
-    <h3>用户管理</h3>
-    <el-row :gutter="16">
-      <el-col :span="12">
-        <h4>批量导入（CSV: username,student_no,nickname,password）</h4>
-        <input type="file" accept=".csv" @change="onImport" />
-        <el-table v-if="importRows.length" :data="importRows" size="small" style="margin-top: 8px">
-          <el-table-column label="用户名" prop="username" />
-          <el-table-column label="初始密码" prop="password" />
-          <el-table-column label="错误" prop="err" />
-        </el-table>
-      </el-col>
-      <el-col :span="12">
-        <h4>邀请码</h4>
-        <el-form inline>
-          <el-form-item label="可用次数">
-            <el-input-number v-model="inviteForm.max_uses" :min="1" :max="999" />
-          </el-form-item>
-          <el-form-item label="有效小时">
-            <el-input-number v-model="inviteForm.expires_in_hours" :min="0" :max="720" />
-          </el-form-item>
-          <el-button type="primary" @click="createInvite">生成</el-button>
-        </el-form>
-        <el-table :data="invites" size="small">
-          <el-table-column label="邀请码" prop="code" />
-          <el-table-column label="已用/上限">
-            <template #default="{ row }">{{ row.used_count }}/{{ row.max_uses }}</template>
-          </el-table-column>
-          <el-table-column label="过期时间">
-            <template #default="{ row }">
-              {{ row.expires_at ? new Date(row.expires_at).toLocaleString() : '不限' }}
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="80">
-            <template #default="{ row }">
-              <el-popconfirm
-                title="删除该邀请码？已注册用户不受影响"
-                width="240"
-                @confirm="deleteInvite(row)"
-              >
-                <template #reference>
-                  <el-button size="small" type="danger" text>删除</el-button>
-                </template>
-              </el-popconfirm>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-col>
-    </el-row>
-    <h4 style="margin-top: 16px">全部用户（{{ users.length }}）</h4>
-    <el-table :data="users" size="small">
-      <el-table-column label="ID" prop="id" width="70" />
-      <el-table-column label="用户名" prop="username" />
-      <el-table-column label="昵称" prop="nickname" />
-      <el-table-column label="学号" prop="student_no" />
-      <el-table-column label="角色" width="180">
-        <template #default="{ row }">
-          <el-select
-            :model-value="row.role"
-            size="small"
-            :disabled="row.id === auth.user?.id"
-            @change="(v: string) => onRoleChange(row, v)"
-          >
-            <!-- 现角色始终在选项里（即使超出操作者权限范围），避免显示错乱 -->
-            <el-option
-              v-for="opt in [...roleOptions.filter((o) => o.value === row.role), ...roleOptions]"
-              :key="opt.value + (opt.value === row.role ? '-cur' : '')"
-              :label="opt.value === row.role ? `${roleLabel(row.role)}（当前）` : opt.label"
-              :value="opt.value"
-              :disabled="opt.value === row.role"
-            />
-          </el-select>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="90">
-        <template #default="{ row }">
-          <el-tag v-if="row.banned" type="danger" size="small">已封禁</el-tag>
-          <el-tag v-else type="success" size="small">正常</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="240">
-        <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-popconfirm title="重置该用户密码？" @confirm="doResetPassword(row)">
-            <template #reference>
-              <el-button size="small" type="warning">重置密码</el-button>
-            </template>
-          </el-popconfirm>
-          <el-popconfirm
-            :title="row.banned ? `解封 ${row.username}？` : `封禁 ${row.username}？封禁后立即无法登录`"
-            width="240"
-            @confirm="onBanToggle(row)"
-          >
-            <template #reference>
-              <el-button size="small" :type="row.banned ? 'success' : 'danger'">
-                {{ row.banned ? '解封' : '封禁' }}
-              </el-button>
-            </template>
-          </el-popconfirm>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <el-dialog :model-value="newPasswords.length > 0" title="重置后的密码" width="420px" @update:model-value="newPasswords = []">
-      <div v-for="p in newPasswords" :key="p.username" style="margin-bottom: 8px">
-        <strong>{{ p.username }}</strong>：<code>{{ p.password }}</code>
+  <Card>
+    <CardHeader>
+      <CardTitle>用户管理</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <h4 class="mb-2 text-sm font-medium">批量导入（CSV: username,student_no,nickname,password）</h4>
+          <input
+            type="file"
+            accept=".csv"
+            class="text-sm file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-input file:bg-card file:px-3 file:py-1.5 file:text-sm file:shadow-sm hover:file:bg-muted"
+            @change="onImport"
+          />
+          <Table v-if="importRows.length" class="mt-2">
+            <TableHeader>
+              <TableRow>
+                <TableHead>用户名</TableHead>
+                <TableHead>初始密码</TableHead>
+                <TableHead>错误</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="(row, i) in importRows" :key="i">
+                <TableCell>{{ row.username }}</TableCell>
+                <TableCell>{{ row.password }}</TableCell>
+                <TableCell>{{ row.err }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+        <div>
+          <h4 class="mb-2 text-sm font-medium">邀请码</h4>
+          <div class="mb-3 flex flex-wrap items-end gap-3">
+            <FormField label="可用次数" class="w-32">
+              <NumberInput v-model="inviteForm.max_uses" :min="1" :max="999" />
+            </FormField>
+            <FormField label="有效小时" class="w-32">
+              <NumberInput v-model="inviteForm.expires_in_hours" :min="0" :max="720" />
+            </FormField>
+            <Button @click="createInvite">生成</Button>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>邀请码</TableHead>
+                <TableHead>已用/上限</TableHead>
+                <TableHead>过期时间</TableHead>
+                <TableHead class="w-20">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="row in invites" :key="row.id">
+                <TableCell>{{ row.code }}</TableCell>
+                <TableCell>{{ row.used_count }}/{{ row.max_uses }}</TableCell>
+                <TableCell>
+                  {{ row.expires_at ? new Date(row.expires_at).toLocaleString() : '不限' }}
+                </TableCell>
+                <TableCell>
+                  <Button variant="ghost" size="sm" class="text-destructive" @click="deleteInvite(row)">
+                    删除
+                  </Button>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
       </div>
-      <p style="color: #909399; font-size: 12px">请立即复制分发，此弹窗关闭后不再显示</p>
-    </el-dialog>
+      <h4 class="mb-2 mt-4 text-sm font-medium">全部用户（{{ users.length }}）</h4>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-[70px]">ID</TableHead>
+            <TableHead>用户名</TableHead>
+            <TableHead>昵称</TableHead>
+            <TableHead>学号</TableHead>
+            <TableHead class="w-[180px]">角色</TableHead>
+            <TableHead class="w-[90px]">状态</TableHead>
+            <TableHead class="w-[240px]">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow v-for="row in users" :key="row.id">
+            <TableCell>{{ row.id }}</TableCell>
+            <TableCell>{{ row.username }}</TableCell>
+            <TableCell>{{ row.nickname }}</TableCell>
+            <TableCell>{{ row.student_no }}</TableCell>
+            <TableCell>
+              <Select
+                :model-value="row.role"
+                :disabled="row.id === auth.user?.id"
+                @update:model-value="(v) => onRoleChange(row, String(v))"
+              >
+                <SelectTrigger class="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <!-- 现角色始终在选项里（即使超出操作者权限范围），避免显示错乱 -->
+                  <SelectItem
+                    v-for="opt in [...roleOptions.filter((o) => o.value === row.role), ...roleOptions]"
+                    :key="opt.value + (opt.value === row.role ? '-cur' : '')"
+                    :value="opt.value"
+                    :disabled="opt.value === row.role"
+                  >
+                    {{ opt.value === row.role ? `${roleLabel(row.role)}（当前）` : opt.label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </TableCell>
+            <TableCell>
+              <Badge v-if="row.banned" variant="destructive">已封禁</Badge>
+              <Badge v-else variant="ac">正常</Badge>
+            </TableCell>
+            <TableCell>
+              <div class="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" @click="openEdit(row)">编辑</Button>
+                <Button variant="secondary" size="sm" @click="doResetPassword(row)">重置密码</Button>
+                <Button
+                  :variant="row.banned ? 'secondary' : 'destructive'"
+                  size="sm"
+                  :class="row.banned ? 'text-ac' : ''"
+                  @click="onBanToggle(row)"
+                >
+                  {{ row.banned ? '解封' : '封禁' }}
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
 
-    <el-dialog v-model="editDialog" title="编辑用户" width="420px">
-      <el-form label-width="80px">
-        <el-form-item label="用户名">
-          <el-input :model-value="editForm.username" disabled />
-        </el-form-item>
-        <el-form-item label="学号">
-          <el-input v-model="editForm.student_no" />
-        </el-form-item>
-        <el-form-item label="昵称">
-          <el-input v-model="editForm.nickname" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editDialog = false">取消</el-button>
-        <el-button type="primary" @click="saveEdit">保存</el-button>
-      </template>
-    </el-dialog>
-  </el-card>
+      <Dialog :open="newPasswords.length > 0" @update:open="newPasswords = []">
+        <DialogContent class="max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>重置后的密码</DialogTitle>
+          </DialogHeader>
+          <div v-for="p in newPasswords" :key="p.username" class="mb-2">
+            <strong>{{ p.username }}</strong>：<code>{{ p.password }}</code>
+          </div>
+          <p class="text-xs text-muted-foreground">请立即复制分发，此弹窗关闭后不再显示</p>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog v-model:open="editDialog">
+        <DialogContent class="max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>编辑用户</DialogTitle>
+          </DialogHeader>
+          <div class="flex flex-col gap-3">
+            <FormField label="用户名">
+              <Input :model-value="editForm.username" disabled />
+            </FormField>
+            <FormField label="学号">
+              <Input v-model="editForm.student_no" />
+            </FormField>
+            <FormField label="昵称">
+              <Input v-model="editForm.nickname" />
+            </FormField>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" @click="editDialog = false">取消</Button>
+            <Button @click="saveEdit">保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </CardContent>
+  </Card>
 </template>

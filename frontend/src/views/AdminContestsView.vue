@@ -1,15 +1,46 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { Contests, errMsg, Problems } from '../api/client'
-import { useResponsive } from '../composables/useResponsive'
+import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { NumberInput } from '@/components/ui/number-input'
+import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { FormField } from '@/components/ui/form-field'
+import { Alert } from '@/components/ui/alert'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 const contests = ref<Awaited<ReturnType<typeof Contests.list>>>([])
 const allProblems = ref<Awaited<ReturnType<typeof Problems.list>>['items']>([])
 const selectedId = ref<number | null>(null)
 const contestProblems = ref<Awaited<ReturnType<typeof Contests.get>>['problems']>([])
 const bankPick = ref<number[]>([])
-const { isPhone } = useResponsive()
 
 const form = reactive({
   title: '',
@@ -23,6 +54,21 @@ const form = reactive({
   allow_manual_freeze: true,
   require_registration: true,
 })
+
+// Select 的 model 不含 null，这里做一层 null ↔ undefined 的桥接
+const contestSelect = computed({
+  get: () => selectedId.value ?? undefined,
+  set: (v: string | number | undefined) => {
+    void selectContest(v == null ? null : Number(v))
+  },
+})
+
+// ui Select 只支持单选，初始题目/题库挑选用复选列表维持 number[] 语义
+function togglePick(list: number[], id: number) {
+  const i = list.indexOf(id)
+  if (i >= 0) list.splice(i, 1)
+  else list.push(id)
+}
 
 async function load() {
   contests.value = await Contests.list()
@@ -59,13 +105,13 @@ async function create() {
     if (form.problem_ids && form.problem_ids.length) {
       await Contests.setProblems(contest.id, form.problem_ids)
     }
-    ElMessage.success('比赛已创建（题目已复制为独立副本）')
+    toast.success('比赛已创建（题目已复制为独立副本）')
     form.title = ''
     form.problem_ids = []
     await load()
     await selectContest(contest.id)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -75,11 +121,11 @@ async function attachBank() {
     const r = (await Contests.setProblems(selectedId.value, bankPick.value)) as unknown as {
       copied?: number
     }
-    ElMessage.success(`已复制 ${r.copied ?? bankPick.value.length} 道题的独立副本`)
+    toast.success(`已复制 ${r.copied ?? bankPick.value.length} 道题的独立副本`)
     bankPick.value = []
     await selectContest(selectedId.value)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -107,23 +153,24 @@ async function createExclusive() {
       contest_id: selectedId.value,
     })
     await Contests.setProblems(selectedId.value, [p.id])
-    ElMessage.success('专属题已创建并挂入比赛')
+    toast.success('专属题已创建并挂入比赛')
     exclusiveDialog.value = false
     exForm.title = ''
     exForm.statement_md = ''
     await selectContest(selectedId.value)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
 async function removeProblem(problemId: number) {
+  if (!(await confirmDialog({ title: '删除该题及其测试数据？', danger: true }))) return
   try {
     await Problems.remove(problemId)
-    ElMessage.success('已删除')
+    toast.success('已删除')
     if (selectedId.value != null) await selectContest(selectedId.value)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -133,148 +180,187 @@ const selectedContestTitle = computed(
 </script>
 
 <template>
-  <el-card>
-    <h3>比赛管理</h3>
-    <el-form label-width="90px" style="max-width: 640px">
-      <el-form-item label="名称">
-        <el-input v-model="form.title" />
-      </el-form-item>
-      <el-form-item label="说明">
-        <el-input v-model="form.description" type="textarea" :rows="3" />
-      </el-form-item>
-      <el-form-item label="开始时间">
-        <el-input v-model="form.start_time" placeholder="2026-09-01T14:00" />
-      </el-form-item>
-      <el-form-item label="结束时间">
-        <el-input v-model="form.end_time" placeholder="2026-09-01T18:00" />
-      </el-form-item>
-      <el-row>
-        <el-col :span="8">
-          <el-form-item label="启用封榜">
-            <el-switch v-model="form.freeze_enabled" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="赛时手动封榜">
-            <el-switch v-model="form.allow_manual_freeze" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="8">
-          <el-form-item label="需要报名">
-            <el-switch v-model="form.require_registration" />
-          </el-form-item>
-        </el-col>
-      </el-row>
-      <el-form-item label="赛制">
-        <el-radio-group v-model="form.mode">
-          <el-radio value="acm">ACM（罚时 + 首对即停）</el-radio>
-          <el-radio value="ioi">IOI（测试点部分分，按总分排名）</el-radio>
-        </el-radio-group>
-      </el-form-item>
-      <el-form-item v-if="form.freeze_enabled && form.mode === 'acm'" label="封榜时间">
-        <el-input v-model="form.freeze_time" placeholder="留空 = 不自动封榜，如 2026-09-01T17:00" />
-      </el-form-item>
-      <el-form-item label="初始题目">
-        <el-select v-model="form.problem_ids" multiple style="width: 100%">
-          <el-option v-for="p in allProblems" :key="p.id" :label="`${p.id}. ${p.title}`" :value="p.id" />
-        </el-select>
-      </el-form-item>
-      <el-button type="primary" @click="create">创建（{{ form.mode === 'ioi' ? 'IOI' : 'ACM' }} 赛制）</el-button>
-    </el-form>
-
-    <h4 style="margin-top: 20px">题目管理（每场比赛的题目为独立副本）</h4>
-    <el-select
-      :model-value="selectedId"
-      placeholder="选择比赛"
-      style="width: 320px"
-      @update:model-value="selectContest"
-    >
-      <el-option v-for="c in contests" :key="c.id" :label="`${c.id}. ${c.title}`" :value="c.id" />
-    </el-select>
-
-    <template v-if="selectedId != null">
-      <div style="display: flex; gap: 12px; align-items: center; margin: 12px 0; flex-wrap: wrap">
-        <el-select
-          v-model="bankPick"
-          multiple
-          placeholder="从题库选择要复制进比赛的题"
-          style="width: min(420px, 100%)"
-        >
-          <el-option v-for="p in allProblems" :key="p.id" :label="`${p.id}. ${p.title}`" :value="p.id" />
-        </el-select>
-        <el-button type="primary" @click="attachBank">复制挂入（独立副本）</el-button>
-        <el-button type="success" @click="exclusiveDialog = true">新建专属题</el-button>
+  <Card>
+    <CardContent class="p-6">
+      <h3 class="mb-3 text-lg font-semibold">比赛管理</h3>
+      <div class="max-w-[640px] space-y-4">
+        <FormField label="名称">
+          <Input v-model="form.title" />
+        </FormField>
+        <FormField label="说明">
+          <Textarea v-model="form.description" :rows="3" />
+        </FormField>
+        <FormField label="开始时间">
+          <Input v-model="form.start_time" placeholder="2026-09-01T14:00" />
+        </FormField>
+        <FormField label="结束时间">
+          <Input v-model="form.end_time" placeholder="2026-09-01T18:00" />
+        </FormField>
+        <div class="grid gap-3 sm:grid-cols-3">
+          <FormField label="启用封榜">
+            <Switch v-model="form.freeze_enabled" />
+          </FormField>
+          <FormField label="赛时手动封榜">
+            <Switch v-model="form.allow_manual_freeze" />
+          </FormField>
+          <FormField label="需要报名">
+            <Switch v-model="form.require_registration" />
+          </FormField>
+        </div>
+        <FormField label="赛制">
+          <RadioGroup v-model="form.mode" class="flex gap-4">
+            <div class="flex items-center gap-2">
+              <RadioGroupItem id="mode-acm" value="acm" />
+              <label for="mode-acm" class="cursor-pointer text-sm">ACM（罚时 + 首对即停）</label>
+            </div>
+            <div class="flex items-center gap-2">
+              <RadioGroupItem id="mode-ioi" value="ioi" />
+              <label for="mode-ioi" class="cursor-pointer text-sm">IOI（测试点部分分，按总分排名）</label>
+            </div>
+          </RadioGroup>
+        </FormField>
+        <FormField v-if="form.freeze_enabled && form.mode === 'acm'" label="封榜时间">
+          <Input v-model="form.freeze_time" placeholder="留空 = 不自动封榜，如 2026-09-01T17:00" />
+        </FormField>
+        <FormField label="初始题目">
+          <div class="max-h-48 space-y-1 overflow-auto rounded-md border border-border p-2">
+            <label
+              v-for="p in allProblems"
+              :key="p.id"
+              class="flex cursor-pointer items-center gap-2 text-sm"
+            >
+              <Checkbox
+                :model-value="form.problem_ids.includes(p.id)"
+                @update:model-value="togglePick(form.problem_ids, p.id)"
+              />
+              {{ p.id }}. {{ p.title }}
+            </label>
+          </div>
+        </FormField>
+        <Button @click="create">创建（{{ form.mode === 'ioi' ? 'IOI' : 'ACM' }} 赛制）</Button>
       </div>
-      <el-table :data="contestProblems" size="small">
-        <el-table-column label="标签" prop="label" width="70" />
-        <el-table-column label="题目 ID" prop="id" width="100" />
-        <el-table-column label="标题" prop="title" />
-        <el-table-column label="操作" width="100">
-          <template #default="{ row }">
-            <el-popconfirm title="删除该题及其测试数据？" @confirm="removeProblem(row.id)">
-              <template #reference>
-                <el-button size="small" type="danger">删除</el-button>
-              </template>
-            </el-popconfirm>
-          </template>
-        </el-table-column>
-      </el-table>
-      <p v-if="contestProblems.length === 0" style="color: #909399">
-        「{{ selectedContestTitle }}」还没有题目
-      </p>
-    </template>
 
-    <h4 style="margin-top: 16px">全部比赛</h4>
-    <el-table :data="contests" size="small">
-      <el-table-column label="#" prop="id" width="70" />
-      <el-table-column label="名称" prop="title" />
-      <el-table-column label="开始">
-        <template #default="{ row }">{{ new Date(row.start_time).toLocaleString() }}</template>
-      </el-table-column>
-      <el-table-column label="结束">
-        <template #default="{ row }">{{ new Date(row.end_time).toLocaleString() }}</template>
-      </el-table-column>
-    </el-table>
+      <h4 class="mb-2 mt-5 text-base font-semibold">题目管理（每场比赛的题目为独立副本）</h4>
+      <Select v-model="contestSelect">
+        <SelectTrigger class="w-80">
+          <SelectValue placeholder="选择比赛" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem v-for="c in contests" :key="c.id" :value="c.id">
+            {{ c.id }}. {{ c.title }}
+          </SelectItem>
+        </SelectContent>
+      </Select>
 
-    <el-dialog v-model="exclusiveDialog" title="新建比赛专属题" :width="isPhone ? '95%' : '60%'">
-      <el-form :label-width="isPhone ? undefined : '90px'" :label-position="isPhone ? 'top' : 'right'">
-        <el-form-item label="标题">
-          <el-input v-model="exForm.title" />
-        </el-form-item>
-        <el-form-item label="题面 MD">
-          <el-input v-model="exForm.statement_md" type="textarea" :rows="6" />
-        </el-form-item>
-        <el-row>
-          <el-col :span="8">
-            <el-form-item label="时限 ms">
-              <el-input-number v-model="exForm.time_limit_ms" :min="100" :step="100" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="内存 MB">
-              <el-input-number v-model="exForm.mem_limit_mb" :min="16" :step="16" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="判题模式">
-              <el-select v-model="exForm.judge_mode">
-                <el-option label="标准比对" value="default" />
-                <el-option label="SPJ 特判" value="spj" />
-                <el-option label="交互题" value="interactive" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-alert
-          title="创建后可在题库管理里找到该题（标记为比赛专属）上传测试数据；它不会出现在公共题库"
-          type="info"
-          :closable="false"
-        />
-      </el-form>
-      <template #footer>
-        <el-button @click="exclusiveDialog = false">取消</el-button>
-        <el-button type="primary" @click="createExclusive">创建并挂入比赛</el-button>
+      <template v-if="selectedId != null">
+        <div class="my-3 flex flex-wrap items-end gap-3">
+          <div class="w-full max-w-[420px]">
+            <p class="mb-1 text-xs text-muted-foreground">从题库选择要复制进比赛的题</p>
+            <div class="max-h-40 space-y-1 overflow-auto rounded-md border border-border p-2">
+              <label
+                v-for="p in allProblems"
+                :key="p.id"
+                class="flex cursor-pointer items-center gap-2 text-sm"
+              >
+                <Checkbox
+                  :model-value="bankPick.includes(p.id)"
+                  @update:model-value="togglePick(bankPick, p.id)"
+                />
+                {{ p.id }}. {{ p.title }}
+              </label>
+            </div>
+          </div>
+          <Button @click="attachBank">复制挂入（独立副本）</Button>
+          <Button variant="secondary" @click="exclusiveDialog = true">新建专属题</Button>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-[70px]">标签</TableHead>
+              <TableHead class="w-[100px]">题目 ID</TableHead>
+              <TableHead>标题</TableHead>
+              <TableHead class="w-[100px]">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="row in contestProblems" :key="row.id">
+              <TableCell>{{ row.label }}</TableCell>
+              <TableCell>{{ row.id }}</TableCell>
+              <TableCell>{{ row.title }}</TableCell>
+              <TableCell>
+                <Button size="sm" variant="destructive" @click="removeProblem(row.id)">删除</Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <p v-if="contestProblems.length === 0" class="mt-2 text-sm text-muted-foreground">
+          「{{ selectedContestTitle }}」还没有题目
+        </p>
       </template>
-    </el-dialog>
-  </el-card>
+
+      <h4 class="mb-2 mt-4 text-base font-semibold">全部比赛</h4>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-[70px]">#</TableHead>
+            <TableHead>名称</TableHead>
+            <TableHead>开始</TableHead>
+            <TableHead>结束</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow v-for="row in contests" :key="row.id">
+            <TableCell>{{ row.id }}</TableCell>
+            <TableCell>{{ row.title }}</TableCell>
+            <TableCell>{{ new Date(row.start_time).toLocaleString() }}</TableCell>
+            <TableCell>{{ new Date(row.end_time).toLocaleString() }}</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+
+      <Dialog v-model:open="exclusiveDialog">
+        <DialogContent class="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>新建比赛专属题</DialogTitle>
+          </DialogHeader>
+          <div class="space-y-4">
+            <FormField label="标题">
+              <Input v-model="exForm.title" />
+            </FormField>
+            <FormField label="题面 MD">
+              <Textarea v-model="exForm.statement_md" :rows="6" />
+            </FormField>
+            <div class="grid gap-3 sm:grid-cols-3">
+              <FormField label="时限 ms">
+                <NumberInput v-model="exForm.time_limit_ms" :min="100" :step="100" />
+              </FormField>
+              <FormField label="内存 MB">
+                <NumberInput v-model="exForm.mem_limit_mb" :min="16" :step="16" />
+              </FormField>
+              <FormField label="判题模式">
+                <Select v-model="exForm.judge_mode">
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">标准比对</SelectItem>
+                    <SelectItem value="spj">SPJ 特判</SelectItem>
+                    <SelectItem value="interactive">交互题</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
+            </div>
+            <Alert
+              variant="info"
+              title="创建后可在题库管理里找到该题（标记为比赛专属）上传测试数据；它不会出现在公共题库"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" @click="exclusiveDialog = false">取消</Button>
+            <Button @click="createExclusive">创建并挂入比赛</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </CardContent>
+  </Card>
 </template>
