@@ -3,10 +3,24 @@
 // 题面用 Markdown 文本 + 右侧预览；无可见性/测试数据（审核通过后配置）。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { MyProblems, errMsg } from '../api/client'
 import { renderStatement } from '../utils/markdown'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { NumberInput } from '@/components/ui/number-input'
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select'
+import { FormField } from '@/components/ui/form-field'
+import { Alert } from '@/components/ui/alert'
+import { toast } from '@/lib/toast'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,7 +48,7 @@ onMounted(async () => {
     const mine = await MyProblems.list()
     const p = mine.find((x) => x.id === problemId.value)
     if (!p) {
-      ElMessage.error('找不到该题目或不是你的题目')
+      toast.error('找不到该题目或不是你的题目')
       router.replace('/my/problems')
       return
     }
@@ -45,7 +59,7 @@ onMounted(async () => {
       mem_limit_mb: p.mem_limit_mb ?? 256, judge_mode: p.judge_mode ?? 'default',
     })
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   } finally {
     loading.value = false
   }
@@ -53,7 +67,7 @@ onMounted(async () => {
 
 async function save() {
   if (!form.title.trim() || !form.statement_md.trim()) {
-    ElMessage.warning('标题和题面不能为空')
+    toast.warning('标题和题面不能为空')
     return
   }
   saving.value = true
@@ -72,14 +86,14 @@ async function save() {
     }
     if (problemId.value) {
       await MyProblems.update(problemId.value, payload)
-      ElMessage.success('已保存；被驳回的题目将重新进入待审核')
+      toast.success('已保存；被驳回的题目将重新进入待审核')
     } else {
       await MyProblems.create(payload)
-      ElMessage.success('题目已提交审核，通过后将出现在公开题库')
+      toast.success('题目已提交审核，通过后将出现在公开题库')
     }
     router.push('/my/problems')
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   } finally {
     saving.value = false
   }
@@ -87,82 +101,87 @@ async function save() {
 </script>
 
 <template>
-  <div v-loading="loading" class="pe-root">
+  <div class="pe-root relative">
+    <div
+      v-if="loading"
+      class="absolute inset-0 z-10 flex items-center justify-center bg-background/60 text-muted-foreground"
+    >
+      加载中…
+    </div>
     <div class="pe-header">
-      <h3 style="margin: 0">
+      <h3 class="m-0">
         {{ problemId ? `编辑我的题目 #${problemId}` : '新建题目（提交审核）' }}
       </h3>
-      <span style="flex: 1" />
-      <el-button @click="router.back()">返回</el-button>
-      <el-button type="primary" :loading="saving" @click="save">保存并提交审核</el-button>
+      <span class="flex-1" />
+      <Button variant="outline" @click="router.back()">返回</Button>
+      <Button :disabled="saving" @click="save">
+        {{ saving ? '保存中…' : '保存并提交审核' }}
+      </Button>
     </div>
 
     <div class="pe-columns">
-      <el-card class="pe-edit" shadow="never">
-        <el-form label-position="top">
-          <el-form-item label="标题">
-            <el-input v-model="form.title" placeholder="题目名称" />
-          </el-form-item>
-          <el-form-item label="题面（所见即所得，支持代码块/图片/链接；右侧实时预览）">
+      <Card class="pe-edit">
+        <CardContent class="flex flex-col gap-4 p-6">
+          <FormField label="标题">
+            <Input v-model="form.title" placeholder="题目名称" />
+          </FormField>
+          <FormField label="题面（所见即所得，支持代码块/图片/链接；右侧实时预览）">
             <MarkdownEditor
               v-model="form.statement_md"
               placeholder="输入题面内容…"
               class="pe-statement-editor"
             />
-          </el-form-item>
-          <el-form-item label="输入描述">
-            <el-input v-model="form.input_desc" type="textarea" :rows="3" />
-          </el-form-item>
-          <el-form-item label="输出描述">
-            <el-input v-model="form.output_desc" type="textarea" :rows="3" />
-          </el-form-item>
-          <el-form-item label="提示（可选）">
-            <el-input v-model="form.hint" type="textarea" :rows="3" />
-          </el-form-item>
-          <el-row :gutter="12">
-            <el-col :span="8">
-              <el-form-item label="时限 ms">
-                <el-input-number v-model="form.time_limit_ms" :min="100" :step="100" style="width: 100%" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="内存 MB">
-                <el-input-number v-model="form.mem_limit_mb" :min="16" :step="16" style="width: 100%" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="判题模式">
-                <el-select v-model="form.judge_mode">
-                  <el-option label="标准比对" value="default" />
-                  <el-option label="SPJ 特判" value="spj" />
-                  <el-option label="交互题" value="interactive" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-alert
-            title="测试数据与样例将在审核通过后由管理员协助配置"
-            type="info"
-            :closable="false"
-          />
-        </el-form>
-      </el-card>
+          </FormField>
+          <FormField label="输入描述">
+            <Textarea v-model="form.input_desc" :rows="3" />
+          </FormField>
+          <FormField label="输出描述">
+            <Textarea v-model="form.output_desc" :rows="3" />
+          </FormField>
+          <FormField label="提示（可选）">
+            <Textarea v-model="form.hint" :rows="3" />
+          </FormField>
+          <div class="grid gap-3 sm:grid-cols-3">
+            <FormField label="时限 ms">
+              <NumberInput v-model="form.time_limit_ms" :min="100" :step="100" class="w-full" />
+            </FormField>
+            <FormField label="内存 MB">
+              <NumberInput v-model="form.mem_limit_mb" :min="16" :step="16" class="w-full" />
+            </FormField>
+            <FormField label="判题模式">
+              <Select v-model="form.judge_mode">
+                <SelectTrigger>
+                  <SelectValue placeholder="判题模式" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">标准比对</SelectItem>
+                  <SelectItem value="spj">SPJ 特判</SelectItem>
+                  <SelectItem value="interactive">交互题</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
+          </div>
+          <Alert variant="info" title="测试数据与样例将在审核通过后由管理员协助配置" />
+        </CardContent>
+      </Card>
 
-      <el-card class="pe-preview" shadow="never">
-        <h4 style="margin-top: 0">实时预览</h4>
-        <h2 style="margin-top: 0">{{ form.title || '（无标题）' }}</h2>
-        <div class="pe-section" v-html="statementHTML" />
-        <template v-if="form.input_desc || form.output_desc">
-          <h4>输入格式</h4>
-          <div class="pe-section" v-html="renderStatement(form.input_desc)" />
-          <h4>输出格式</h4>
-          <div class="pe-section" v-html="renderStatement(form.output_desc)" />
-        </template>
-        <template v-if="form.hint">
-          <h4>提示</h4>
-          <div class="pe-section" v-html="renderStatement(form.hint)" />
-        </template>
-      </el-card>
+      <Card class="pe-preview">
+        <CardContent class="p-6">
+          <h4 class="mt-0">实时预览</h4>
+          <h2 class="mt-0">{{ form.title || '（无标题）' }}</h2>
+          <div class="pe-section" v-html="statementHTML" />
+          <template v-if="form.input_desc || form.output_desc">
+            <h4>输入格式</h4>
+            <div class="pe-section" v-html="renderStatement(form.input_desc)" />
+            <h4>输出格式</h4>
+            <div class="pe-section" v-html="renderStatement(form.output_desc)" />
+          </template>
+          <template v-if="form.hint">
+            <h4>提示</h4>
+            <div class="pe-section" v-html="renderStatement(form.hint)" />
+          </template>
+        </CardContent>
+      </Card>
     </div>
   </div>
 </template>

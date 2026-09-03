@@ -1,27 +1,46 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { Contests, Teams, connectWS, errMsg, type StandingRow } from '../api/client'
 import { renderStatement } from '../utils/markdown'
 import { useAuthStore } from '../stores/auth'
+import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm'
 import ContestSubmissions from '../components/ContestSubmissions.vue'
 import ScoreBoard from '../components/ScoreBoard.vue'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { NumberInput } from '@/components/ui/number-input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert } from '@/components/ui/alert'
+import { Separator } from '@/components/ui/separator'
 
 const auth = useAuthStore()
 
 async function registerContest() {
   try {
     myReg.value = await Contests.register(cid.value, regForm.value.team_name, regForm.value.team_type)
-    ElMessage.success(regForm.value.team_type === 'starred' ? '已报名（打星队）' : '已报名（正式队）')
+    toast.success(regForm.value.team_type === 'starred' ? '已报名（打星队）' : '已报名（正式队）')
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
 // 组队赛：队长以队为单位报名
 const isTeamMode = computed(() => (data.value?.contest as { team_mode?: boolean } | undefined)?.team_mode === true)
 const regTeamId = ref<number>()
+const regTeamSelect = computed({
+  get: () => regTeamId.value,
+  set: (v: string | number | undefined) => {
+    regTeamId.value = v == null ? undefined : Number(v)
+  },
+})
 const myCaptainedTeams = ref<{ id: number; name: string; member_count: number }[]>([])
 watch(isTeamMode, async (v) => {
   if (!v || !auth.logged) return
@@ -33,15 +52,15 @@ watch(isTeamMode, async (v) => {
 
 async function registerTeam() {
   if (!regTeamId.value) {
-    ElMessage.warning('先选择要报名的小组')
+    toast.warning('先选择要报名的小组')
     return
   }
   try {
     await Contests.registerTeam(cid.value, regTeamId.value, regForm.value.team_type)
-    ElMessage.success('已以队为单位报名，全队成员共同参赛')
+    toast.success('已以队为单位报名，全队成员共同参赛')
     location.reload()
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -49,29 +68,34 @@ async function saveRegName() {
   if (!myReg.value) return
   try {
     myReg.value = await Contests.editMyRegistration(cid.value, myReg.value.team_name)
-    ElMessage.success('队伍名已更新')
+    toast.success('队伍名已更新')
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
 async function cancelReg() {
+  if (!(await confirmDialog({
+    title: '确定退赛？',
+    description: '提交记录将保留但报名作废',
+    danger: true,
+  }))) return
   try {
     await Contests.cancelMyRegistration(cid.value)
     myReg.value = null
-    ElMessage.success('已取消报名')
+    toast.success('已取消报名')
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
 async function saveReveal() {
   try {
     await Contests.reveal(cid.value, revealCount.value)
-    ElMessage.success(`已揭示最后 ${revealCount.value} 名`)
+    toast.success(`已揭示最后 ${revealCount.value} 名`)
     await loadStandings()
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 const route = useRoute()
@@ -88,6 +112,7 @@ async function loadStandings() {
 }
 
 const isJudge = computed(() => data.value?.is_judge === true)
+const boardMode = computed<'acm' | 'ioi'>(() => (data.value?.contest.mode === 'ioi' ? 'ioi' : 'acm'))
 const contestFrozenNow = computed(() => {
   if (!data.value) return false
   const c = data.value.contest
@@ -100,6 +125,13 @@ const noticeText = ref('')
 const timeForm = ref({ start_time: '', end_time: '' })
 const frozen = ref(false)
 const flagForm = ref({ user_id: null as number | null, starred: false, cheated: false })
+// Select 的 model 不含 null，这里做一层 null ↔ undefined 的桥接
+const flagUserSelect = computed({
+  get: () => flagForm.value.user_id ?? undefined,
+  set: (v: string | number | undefined) => {
+    flagForm.value.user_id = v == null ? null : Number(v)
+  },
+})
 // 用户标记下拉数据源：默认参赛者（有提交者），搜索时合并全量用户
 const participants = ref<Awaited<ReturnType<typeof Contests.participants>>>([])
 const searchResults = ref<Awaited<ReturnType<typeof Contests.searchContestUsers>>>([])
@@ -108,6 +140,12 @@ const registrations = ref<Awaited<ReturnType<typeof Contests.registrations>>>([]
 const myReg = ref<Awaited<ReturnType<typeof Contests.myRegistration>>>(null)
 const regForm = ref({ team_name: '', team_type: 'official' })
 const revealCount = ref(0)
+
+// reka Select 不允许重复 value，搜索结果里已在参赛者分组的用户不再重复展示
+const searchOnlyResults = computed(() => {
+  const ids = new Set(participants.value.map((u) => u.id))
+  return searchResults.value.filter((u) => !ids.has(u.id))
+})
 
 async function loadJuryData() {
   if (!isJudge.value) return
@@ -129,6 +167,10 @@ async function searchUsers(query: string) {
   }
 }
 
+function onFlagSearchInput(e: Event) {
+  searchUsers((e.target as HTMLInputElement).value)
+}
+
 const userLabel = (u: { id: number; username: string; nickname: string }) =>
   `${u.nickname || u.username} (@${u.username} · #${u.id})`
 
@@ -144,7 +186,7 @@ watch(
 
 async function applyFlags() {
   if (!flagForm.value.user_id) {
-    ElMessage.warning('先在下拉框选择选手')
+    toast.warning('先在下拉框选择选手')
     return
   }
   try {
@@ -154,11 +196,11 @@ async function applyFlags() {
       flagForm.value.starred,
       flagForm.value.cheated,
     )
-    ElMessage.success('标记已保存，榜单已更新')
+    toast.success('标记已保存，榜单已更新')
     flagged.value = await Contests.flags(cid.value)
     await loadStandings()
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -169,32 +211,33 @@ async function loadRegistrations() {
 async function changeRegType(userId: number, teamName: string, teamType: string) {
   try {
     await Contests.adminEditRegistration(cid.value, userId, teamName, teamType)
-    ElMessage.success('类型已更新')
+    toast.success('类型已更新')
     await loadRegistrations()
     await loadStandings()
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
 async function removeRegistration(userId: number) {
+  if (!(await confirmDialog({ title: '删除该报名？', danger: true }))) return
   try {
     await Contests.adminDeleteRegistration(cid.value, userId)
-    ElMessage.success('报名已删除')
+    toast.success('报名已删除')
     await loadRegistrations()
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
 async function clearFlags(userId: number) {
   try {
     await Contests.setUserFlags(cid.value, userId, false, false)
-    ElMessage.success('已撤销标记')
+    toast.success('已撤销标记')
     flagged.value = await Contests.flags(cid.value)
     await loadStandings()
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -231,9 +274,9 @@ async function publishNotice() {
     await Contests.createNotice(cid.value, noticeText.value.trim())
     noticeText.value = ''
     notices.value = await Contests.notices(cid.value)
-    ElMessage.success('公告已发布')
+    toast.success('公告已发布')
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -242,17 +285,17 @@ async function removeNotice(id: number) {
     await Contests.deleteNotice(cid.value, id)
     notices.value = await Contests.notices(cid.value)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
 async function saveFreeze() {
   try {
     await Contests.setFreeze(cid.value, frozen.value)
-    ElMessage.success(frozen.value ? '榜单已手动冻结' : '榜单已解除冻结')
+    toast.success(frozen.value ? '榜单已手动冻结' : '榜单已解除冻结')
     data.value = await Contests.get(cid.value)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -263,21 +306,26 @@ async function saveTime() {
       new Date(timeForm.value.start_time).toISOString(),
       new Date(timeForm.value.end_time).toISOString(),
     )
-    ElMessage.success('比赛时间已调整')
+    toast.success('比赛时间已调整')
     data.value = await Contests.get(cid.value)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
 async function rejudge(pid: number) {
+  if (!(await confirmDialog({
+    title: '重测本题？',
+    description: '本题的全部提交将重新排队评测',
+    danger: true,
+  }))) return
   try {
     const r = (await Contests.rejudgeProblem(cid.value, pid)) as unknown as {
       requeued?: number
     }
-    ElMessage.success(`已重测 ${r.requeued ?? 0} 条提交`)
+    toast.success(`已重测 ${r.requeued ?? 0} 条提交`)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -296,245 +344,304 @@ function openProjection() {
 
 <template>
   <div v-if="data">
-    <el-card>
-      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
-        <h2 style="margin: 0">{{ data.contest.title }}</h2>
-        <span style="color: #909399">{{ remaining }}</span>
-        <el-tag v-if="data.contest.manual_frozen" type="warning">榜单已冻结</el-tag>
-        <el-button size="small" @click="exportCSV">导出榜单 CSV</el-button>
-        <el-button
-          size="small"
-          type="warning"
-          @click="openProjection"
-        >
-          投屏模式
-        </el-button>
-      </div>
-      <div v-html="renderStatement(data.contest.description)" />
-    </el-card>
+    <Card>
+      <CardContent class="p-4">
+        <div class="flex flex-wrap items-center gap-3">
+          <h2 class="m-0 text-xl font-semibold">{{ data.contest.title }}</h2>
+          <span class="text-muted-foreground">{{ remaining }}</span>
+          <Badge v-if="data.contest.manual_frozen" variant="tle">榜单已冻结</Badge>
+          <Button size="sm" variant="outline" @click="exportCSV">导出榜单 CSV</Button>
+          <Button size="sm" variant="secondary" @click="openProjection">投屏模式</Button>
+        </div>
+        <div class="mt-3" v-html="renderStatement(data.contest.description)" />
+      </CardContent>
+    </Card>
 
-    <el-card v-if="notices.length || isJudge" style="margin-top: 12px">
-      <h4 style="margin: 0 0 8px">公告</h4>
-      <div v-for="n in notices" :key="n.id" style="display: flex; gap: 8px; margin-bottom: 6px">
-        <span style="flex: 1">{{ n.content }}</span>
-        <span style="color: #c0c4cc; font-size: 12px; white-space: nowrap">
-          {{ new Date(n.created_at).toLocaleString() }}
-        </span>
-        <el-button v-if="isJudge" size="small" text @click="removeNotice(n.id)">删除</el-button>
-      </div>
-      <div v-if="isJudge" style="display: flex; gap: 8px; margin-top: 8px">
-        <el-input v-model="noticeText" placeholder="发布新公告（如：B 题数据已更新并重测）" />
-        <el-button type="primary" @click="publishNotice">发布</el-button>
-      </div>
-    </el-card>
+    <Card v-if="notices.length || isJudge" class="mt-3">
+      <CardContent class="p-4">
+        <h4 class="mb-2 mt-0 text-base font-semibold">公告</h4>
+        <div v-for="n in notices" :key="n.id" class="mb-1.5 flex items-center gap-2">
+          <span class="flex-1">{{ n.content }}</span>
+          <span class="whitespace-nowrap text-xs text-muted-foreground">
+            {{ new Date(n.created_at).toLocaleString() }}
+          </span>
+          <Button v-if="isJudge" size="sm" variant="ghost" @click="removeNotice(n.id)">删除</Button>
+        </div>
+        <div v-if="isJudge" class="mt-2 flex gap-2">
+          <Input v-model="noticeText" placeholder="发布新公告（如：B 题数据已更新并重测）" />
+          <Button @click="publishNotice">发布</Button>
+        </div>
+      </CardContent>
+    </Card>
 
-    <el-card v-if="auth.logged && !myReg && !isJudge && !isTeamMode" style="margin-top: 12px">
-      <h4 style="margin-top: 0">报名参赛</h4>
-      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap">
-        <el-input
-          v-model="regForm.team_name"
-          placeholder="队伍名（可选）"
-          style="width: 220px"
-        />
-        <el-select v-model="regForm.team_type" style="width: 160px">
-          <el-option label="正式队伍" value="official" />
-          <el-option label="打星队（不占名次）" value="starred" />
-        </el-select>
-        <el-button type="primary" @click="registerContest">报名</el-button>
-      </div>
-    </el-card>
+    <Card v-if="auth.logged && !myReg && !isJudge && !isTeamMode" class="mt-3">
+      <CardContent class="p-4">
+        <h4 class="mb-2 mt-0 text-base font-semibold">报名参赛</h4>
+        <div class="flex flex-wrap items-center gap-3">
+          <Input v-model="regForm.team_name" placeholder="队伍名（可选）" class="w-56" />
+          <Select v-model="regForm.team_type">
+            <SelectTrigger class="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="official">正式队伍</SelectItem>
+              <SelectItem value="starred">打星队（不占名次）</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button @click="registerContest">报名</Button>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- 组队赛报名：队长选择自己的小组，以队为单位报名 -->
-    <el-card v-if="auth.logged && !myReg && !isJudge && isTeamMode" style="margin-top: 12px">
-      <h4 style="margin-top: 0">组队报名（ICPC 三人一队）</h4>
-      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap">
-        <el-select v-model="regTeamId" placeholder="选择我的小组" style="width: 240px">
-          <el-option v-for="t in myCaptainedTeams" :key="t.id" :label="`${t.name}（${t.member_count} 人）`" :value="t.id" />
-        </el-select>
-        <el-select v-model="regForm.team_type" style="width: 160px">
-          <el-option label="正式队伍" value="official" />
-          <el-option label="打星队（不占名次）" value="starred" />
-        </el-select>
-        <el-button type="primary" @click="registerTeam">以队报名</el-button>
-      </div>
-      <p v-if="myCaptainedTeams.length === 0" style="color: #909399; font-size: 12px; margin: 8px 0 0">
-        你还没有担任队长的小组，请先到「小组」页创建或管理队伍
-      </p>
-    </el-card>
-    <el-card v-if="myReg" style="margin-top: 12px">
-      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap">
-        <el-tag :type="myReg.team_type === 'starred' ? 'warning' : 'success'">
-          {{ myReg.team_type === 'starred' ? '★ 打星队' : '正式队' }}
-        </el-tag>
-        <el-input
-          v-model="myReg.team_name"
-          placeholder="队伍名"
-          style="width: 200px"
-          @change="saveRegName"
-        />
-        <span style="color: #909399; font-size: 12px">改队名后回车保存</span>
-        <span style="flex: 1" />
-        <el-popconfirm title="确定退赛？提交记录将保留但报名作废" @confirm="cancelReg">
-          <template #reference>
-            <el-button type="danger" text>取消报名</el-button>
-          </template>
-        </el-popconfirm>
-      </div>
-    </el-card>
+    <Card v-if="auth.logged && !myReg && !isJudge && isTeamMode" class="mt-3">
+      <CardContent class="p-4">
+        <h4 class="mb-2 mt-0 text-base font-semibold">组队报名（ICPC 三人一队）</h4>
+        <div class="flex flex-wrap items-center gap-3">
+          <Select v-model="regTeamSelect">
+            <SelectTrigger class="w-60">
+              <SelectValue placeholder="选择我的小组" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="t in myCaptainedTeams" :key="t.id" :value="t.id">
+                {{ t.name }}（{{ t.member_count }} 人）
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Select v-model="regForm.team_type">
+            <SelectTrigger class="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="official">正式队伍</SelectItem>
+              <SelectItem value="starred">打星队（不占名次）</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button @click="registerTeam">以队报名</Button>
+        </div>
+        <p v-if="myCaptainedTeams.length === 0" class="mb-0 mt-2 text-xs text-muted-foreground">
+          你还没有担任队长的小组，请先到「小组」页创建或管理队伍
+        </p>
+      </CardContent>
+    </Card>
+    <Card v-if="myReg" class="mt-3">
+      <CardContent class="p-4">
+        <div class="flex flex-wrap items-center gap-3">
+          <Badge :variant="myReg.team_type === 'starred' ? 'tle' : 'ac'">
+            {{ myReg.team_type === 'starred' ? '★ 打星队' : '正式队' }}
+          </Badge>
+          <Input
+            v-model="myReg.team_name"
+            placeholder="队伍名"
+            class="w-52"
+            @change="saveRegName"
+          />
+          <span class="text-xs text-muted-foreground">改队名后回车保存</span>
+          <span class="flex-1" />
+          <Button variant="ghost" size="sm" class="text-destructive" @click="cancelReg">取消报名</Button>
+        </div>
+      </CardContent>
+    </Card>
 
-    <el-tabs v-model="tab" style="margin-top: 12px">
-      <el-tab-pane label="题目" name="problems">
-        <el-alert
+    <Tabs v-model="tab" class="mt-3">
+      <TabsList>
+        <TabsTrigger value="problems">题目</TabsTrigger>
+        <TabsTrigger value="subs">提交记录</TabsTrigger>
+        <TabsTrigger value="standings">榜单</TabsTrigger>
+        <TabsTrigger v-if="isJudge" value="jury">裁判台</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="problems">
+        <Alert
+          variant="info"
           title="每道题都有独立副本——只属于本场比赛，从这里的入口提交才会计入榜单"
-          type="info"
-          :closable="false"
-          style="margin-bottom: 10px"
+          class="mb-3"
         />
-        <el-table
-          :data="data.problems"
-          @row-click="(row: { id: number }) => router.push(`/contests/${route.params.id}/problems/${row.id}`)"
-        >
-          <el-table-column label="" prop="label" width="80" />
-          <el-table-column label="题目" prop="title" />
-          <el-table-column label="时限" width="110">
-            <template #default="{ row }">{{ row.time_limit_ms }} ms</template>
-          </el-table-column>
-          <el-table-column label="内存" width="110">
-            <template #default="{ row }">{{ row.mem_limit_mb }} MB</template>
-          </el-table-column>
-          <el-table-column v-if="isJudge" label="裁判" width="130">
-            <template #default="{ row }">
-              <el-button size="small" @click="rejudge(row.id)">重测本题</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-tab-pane>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-20" />
+              <TableHead>题目</TableHead>
+              <TableHead class="w-28">时限</TableHead>
+              <TableHead class="w-28">内存</TableHead>
+              <TableHead v-if="isJudge" class="w-32">裁判</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
+              v-for="row in data.problems"
+              :key="row.id"
+              class="cursor-pointer"
+              @click="router.push(`/contests/${route.params.id}/problems/${row.id}`)"
+            >
+              <TableCell>{{ row.label }}</TableCell>
+              <TableCell>{{ row.title }}</TableCell>
+              <TableCell>{{ row.time_limit_ms }} ms</TableCell>
+              <TableCell>{{ row.mem_limit_mb }} MB</TableCell>
+              <TableCell v-if="isJudge">
+                <Button size="sm" @click.stop="rejudge(row.id)">重测本题</Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TabsContent>
 
-      <el-tab-pane label="提交记录" name="subs">
+      <TabsContent value="subs">
         <ContestSubmissions :cid="Number(route.params.id)" :is-judge="isJudge" :frozen="contestFrozenNow" />
-      </el-tab-pane>
+      </TabsContent>
 
-      <el-tab-pane label="榜单" name="standings">
-        <ScoreBoard :rows="rows" :problems="data.problems" />
-      </el-tab-pane>
+      <TabsContent value="standings">
+        <ScoreBoard :rows="rows" :problems="data.problems" :mode="boardMode" />
+      </TabsContent>
 
-      <el-tab-pane v-if="isJudge" label="裁判台" name="jury">
-        <el-row :gutter="16">
-          <el-col :xs="24" :md="12">
-            <el-card>
-              <h4>比赛时间</h4>
-              <el-input v-model="timeForm.start_time" placeholder="开始 YYYY-MM-DDTHH:mm" style="margin-bottom: 8px" />
-              <el-input v-model="timeForm.end_time" placeholder="结束 YYYY-MM-DDTHH:mm" style="margin-bottom: 8px" />
-              <el-button type="primary" @click="saveTime">保存时间</el-button>
-              <el-divider />
-              <h4>手动封榜</h4>
-              <el-switch v-model="frozen" active-text="冻结" inactive-text="解封" @change="saveFreeze" />
-            </el-card>
-          </el-col>
-          <el-col :xs="24" :md="12">
-            <el-card>
-              <h4>滚榜揭示控制台</h4>
-              <p style="color: #909399; font-size: 12px">
+      <TabsContent v-if="isJudge" value="jury">
+        <div class="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardContent class="p-4">
+              <h4 class="mb-2 mt-0 text-base font-semibold">比赛时间</h4>
+              <Input v-model="timeForm.start_time" placeholder="开始 YYYY-MM-DDTHH:mm" class="mb-2" />
+              <Input v-model="timeForm.end_time" placeholder="结束 YYYY-MM-DDTHH:mm" class="mb-2" />
+              <Button @click="saveTime">保存时间</Button>
+              <Separator class="my-4" />
+              <h4 class="mb-2 mt-0 text-base font-semibold">手动封榜</h4>
+              <div class="flex items-center gap-2">
+                <Switch v-model="frozen" @update:model-value="saveFreeze" />
+                <span class="text-sm text-muted-foreground">{{ frozen ? '冻结' : '解封' }}</span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent class="p-4">
+              <h4 class="mb-1 mt-0 text-base font-semibold">滚榜揭示控制台</h4>
+              <p class="text-xs text-muted-foreground">
                 按真实最终榜从最后一名向前逐队解除遮罩；已揭示队伍的真实成绩即刻上榜。
               </p>
-              <div style="display: flex; gap: 12px; align-items: center">
-                <el-input-number v-model="revealCount" :min="0" :max="500" />
-                <el-button type="warning" @click="saveReveal">应用揭示</el-button>
+              <div class="flex items-center gap-3">
+                <NumberInput v-model="revealCount" :min="0" :max="500" class="w-36" />
+                <Button variant="secondary" @click="saveReveal">应用揭示</Button>
               </div>
-              <el-divider />
-              <h4>报名管理</h4>
-              <el-table :data="registrations" size="small" style="margin-bottom: 8px">
-                <el-table-column label="用户" min-width="120">
-                  <template #default="{ row }">{{ row.username || row.user_id }}</template>
-                </el-table-column>
-                <el-table-column label="队伍名" prop="team_name" width="130" />
-                <el-table-column label="类型" width="100">
-                  <template #default="{ row }">
-                    <el-tag :type="row.team_type === 'starred' ? 'warning' : 'success'" size="small">
-                      {{ row.team_type === 'starred' ? '★ 打星' : '正式' }}
-                    </el-tag>
+              <Separator class="my-4" />
+              <h4 class="mb-2 mt-0 text-base font-semibold">报名管理</h4>
+              <Table class="mb-2">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>用户</TableHead>
+                    <TableHead class="w-32">队伍名</TableHead>
+                    <TableHead class="w-24">类型</TableHead>
+                    <TableHead class="w-44">改类型</TableHead>
+                    <TableHead class="w-20">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow v-if="!registrations.length">
+                    <TableCell :colspan="5" class="text-center text-muted-foreground">暂无数据</TableCell>
+                  </TableRow>
+                  <TableRow v-for="row in registrations" :key="row.user_id">
+                    <TableCell>{{ row.username || row.user_id }}</TableCell>
+                    <TableCell>{{ row.team_name }}</TableCell>
+                    <TableCell>
+                      <Badge :variant="row.team_type === 'starred' ? 'tle' : 'ac'">
+                        {{ row.team_type === 'starred' ? '★ 打星' : '正式' }}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        :model-value="row.team_type"
+                        @update:model-value="(v: string | number | undefined) => changeRegType(row.user_id, row.team_name, String(v))"
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="official">正式队伍</SelectItem>
+                          <SelectItem value="starred">★ 打星队</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        class="text-destructive"
+                        @click="removeRegistration(row.user_id)"
+                      >
+                        删除
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <h4 class="mb-2 mt-0 text-base font-semibold">用户标记（打星 / 作弊）</h4>
+              <Input
+                placeholder="输入用户名/昵称/ID 搜索全量用户"
+                class="mb-2"
+                @input="onFlagSearchInput"
+              />
+              <Select v-model="flagUserSelect">
+                <SelectTrigger class="mb-2.5 w-full">
+                  <SelectValue placeholder="选择参赛选手，或输入用户名/昵称/ID 搜索全量用户" />
+                </SelectTrigger>
+                <SelectContent>
+                  <div class="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    参赛选手（本场有提交）
+                  </div>
+                  <SelectItem v-for="u in participants" :key="'p' + u.id" :value="u.id">
+                    {{ userLabel(u) }}
+                  </SelectItem>
+                  <template v-if="searchOnlyResults.length">
+                    <div class="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                      全量搜索结果
+                    </div>
+                    <SelectItem v-for="u in searchOnlyResults" :key="'s' + u.id" :value="u.id">
+                      {{ userLabel(u) }}
+                    </SelectItem>
                   </template>
-                </el-table-column>
-                <el-table-column label="改类型" width="200">
-                  <template #default="{ row }">
-                    <el-select
-                      :model-value="row.team_type"
-                      size="small"
-                      @update:model-value="(v: string) => changeRegType(row.user_id, row.team_name, v)"
-                    >
-                      <el-option label="正式队伍" value="official" />
-                      <el-option label="★ 打星队" value="starred" />
-                    </el-select>
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="90">
-                  <template #default="{ row }">
-                    <el-popconfirm title="删除该报名？" @confirm="removeRegistration(row.user_id)">
-                      <template #reference>
-                        <el-button size="small" type="danger" text>删除</el-button>
-                      </template>
-                    </el-popconfirm>
-                  </template>
-                </el-table-column>
-              </el-table>
-              <h4>用户标记（打星 / 作弊）</h4>
-              <el-select
-                v-model="flagForm.user_id"
-                filterable
-                remote
-                :remote-method="searchUsers"
-                :loading="false"
-                placeholder="选择参赛选手，或输入用户名/昵称/ID 搜索全量用户"
-                style="width: 100%; margin-bottom: 10px"
-              >
-                <el-option-group label="参赛选手（本场有提交）">
-                  <el-option
-                    v-for="u in participants"
-                    :key="'p' + u.id"
-                    :label="userLabel(u)"
-                    :value="u.id"
-                  />
-                </el-option-group>
-                <el-option-group v-if="searchResults.length" label="全量搜索结果">
-                  <el-option
-                    v-for="u in searchResults"
-                    :key="'s' + u.id"
-                    :label="userLabel(u)"
-                    :value="u.id"
-                  />
-                </el-option-group>
-              </el-select>
-              <div style="display: flex; gap: 16px; margin-bottom: 8px">
-                <el-checkbox v-model="flagForm.starred" label="打星（不占名次）" />
-                <el-checkbox v-model="flagForm.cheated" label="作弊（出榜标红）" />
+                </SelectContent>
+              </Select>
+              <div class="mb-2 flex gap-4">
+                <label class="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox v-model="flagForm.starred" />
+                  打星（不占名次）
+                </label>
+                <label class="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox v-model="flagForm.cheated" />
+                  作弊（出榜标红）
+                </label>
               </div>
-              <el-button type="primary" @click="applyFlags">保存标记</el-button>
-              <el-divider />
-              <h4>已标记用户</h4>
-              <el-table :data="flagged" size="small">
-                <el-table-column label="用户" min-width="130">
-                  <template #default="{ row }">{{ row.username || row.user_id }}</template>
-                </el-table-column>
-                <el-table-column label="标记" width="90">
-                  <template #default="{ row }">
-                    <el-tag v-if="row.cheated" type="danger" size="small">作弊</el-tag>
-                    <el-tag v-else-if="row.starred" type="warning" size="small">★</el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="90">
-                  <template #default="{ row }">
-                    <el-button size="small" text @click="clearFlags(row.user_id)">撤销</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-              <p style="color: #909399; font-size: 12px; margin: 8px 0 0">
+              <Button @click="applyFlags">保存标记</Button>
+              <Separator class="my-4" />
+              <h4 class="mb-2 mt-0 text-base font-semibold">已标记用户</h4>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>用户</TableHead>
+                    <TableHead class="w-24">标记</TableHead>
+                    <TableHead class="w-20">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow v-if="!flagged.length">
+                    <TableCell :colspan="3" class="text-center text-muted-foreground">暂无数据</TableCell>
+                  </TableRow>
+                  <TableRow v-for="row in flagged" :key="row.user_id">
+                    <TableCell>{{ row.username || row.user_id }}</TableCell>
+                    <TableCell>
+                      <Badge v-if="row.cheated" variant="destructive">作弊</Badge>
+                      <Badge v-else-if="row.starred" variant="tle">★</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="ghost" @click="clearFlags(row.user_id)">撤销</Button>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <p class="mb-0 mt-2 text-xs text-muted-foreground">
                 重测入口在「题目」tab 的裁判列；取消成绩/单条重判在「提交记录」tab。
               </p>
-            </el-card>
-          </el-col>
-        </el-row>
-      </el-tab-pane>
-    </el-tabs>
+            </CardContent>
+          </Card>
+        </div>
+      </TabsContent>
+    </Tabs>
   </div>
 </template>
-

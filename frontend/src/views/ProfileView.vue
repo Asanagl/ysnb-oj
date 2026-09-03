@@ -1,32 +1,15 @@
 <script setup lang="ts">
-import * as echarts from 'echarts/core'
-import { BarChart, HeatmapChart, LineChart, PieChart } from 'echarts/charts'
-import {
-  CalendarComponent,
-  GridComponent,
-  LegendComponent,
-  TooltipComponent,
-  VisualMapComponent,
-} from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Users, type UserProfile } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import StatusTag from '../components/StatusTag.vue'
-
-echarts.use([
-  BarChart,
-  HeatmapChart,
-  LineChart,
-  PieChart,
-  CalendarComponent,
-  GridComponent,
-  LegendComponent,
-  TooltipComponent,
-  VisualMapComponent,
-  CanvasRenderer,
-])
+import { Alert } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Stat } from '@/components/ui/stat'
+import { cssVar, useChart } from '@/composables/useChart'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -45,29 +28,13 @@ const heatRef = ref<HTMLDivElement>()
 const trendRef = ref<HTMLDivElement>()
 const pieRef = ref<HTMLDivElement>()
 const tagRef = ref<HTMLDivElement>()
-const charts: echarts.ECharts[] = []
-// why surfaced in-page: chart init errors would otherwise be a silent blank
-// section; showing them makes remote debugging possible without console.
-const chartErrors = ref<string[]>([])
-let resizeHandler: (() => void) | null = null
-
-function mount(name: string, el: HTMLDivElement | undefined, option: echarts.EChartsCoreOption) {
-  if (!el) {
-    chartErrors.value.push(`${name}: 容器不存在`)
-    return
-  }
-  try {
-    const chart = echarts.init(el)
-    chart.setOption(option)
-    charts.push(chart)
-  } catch (e) {
-    chartErrors.value.push(`${name}: ${String(e)}`)
-  }
-}
+const { chartErrors, mount, disposeAll, resizeAll, watchTheme } = useChart()
 
 function drawAll() {
   if (!profile.value) return
-  charts.length = 0
+  disposeAll()
+
+  const muted = cssVar('--muted-foreground')
 
   // heatmap merges 本站 activity with the selected external platforms
   // (heatPlatforms, persisted in localStorage as oj_heat_platforms).
@@ -99,9 +66,9 @@ function drawAll() {
     calendar: {
       range: [heatRows[0]?.[0], heatRows.at(-1)?.[0]],
       cellSize: ['auto', 16],
-      itemStyle: { color: '#161b22', borderColor: '#0d1117' },
-      dayLabel: { color: '#8b949e', nameMap: 'ZH' },
-      monthLabel: { color: '#8b949e' },
+      itemStyle: { color: cssVar('--card'), borderColor: cssVar('--border') },
+      dayLabel: { color: muted, nameMap: 'ZH' },
+      monthLabel: { color: muted },
       yearLabel: { show: false },
     },
     series: [{ type: 'heatmap', coordinateSystem: 'calendar', data: heatData }],
@@ -110,42 +77,44 @@ function drawAll() {
   const t = profile.value.trend
   mount('trend', trendRef.value, {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['提交', 'AC'], textStyle: { color: '#909399' } },
+    legend: { data: ['提交', 'AC'], textStyle: { color: muted } },
     grid: { left: 40, right: 16, top: 32, bottom: 24 },
-    xAxis: { type: 'category', data: t.map((d) => d.date.slice(5)), axisLabel: { color: '#909399' } },
-    yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#909399' } },
+    xAxis: { type: 'category', data: t.map((d) => d.date.slice(5)), axisLabel: { color: muted } },
+    yAxis: { type: 'value', minInterval: 1, axisLabel: { color: muted } },
     series: [
       { name: '提交', type: 'line', data: t.map((d) => d.submissions), smooth: true,
-        areaStyle: { opacity: 0.15 }, itemStyle: { color: '#409eff' } },
+        areaStyle: { opacity: 0.15 }, itemStyle: { color: cssVar('--primary') } },
       { name: 'AC', type: 'line', data: t.map((d) => d.ac), smooth: true,
-        itemStyle: { color: '#67c23a' } },
+        itemStyle: { color: cssVar('--ac') } },
     ],
   })
 
   const pieData = Object.entries(profile.value.by_status).map(([name, value]) => ({ name, value }))
   mount('pie', pieRef.value, {
     tooltip: { trigger: 'item' },
-    legend: { bottom: 0, textStyle: { color: '#909399' } },
+    legend: { bottom: 0, textStyle: { color: muted } },
     series: [{
       type: 'pie', radius: ['45%', '70%'], center: ['50%', '45%'],
-      data: pieData, label: { color: '#909399' },
+      data: pieData, label: { color: muted },
     }],
   })
 
   const tags = [...profile.value.tags].sort((a, b) => b.attempted - a.attempted).slice(0, 12)
   mount('tags', tagRef.value, {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['尝试', '解决'], textStyle: { color: '#909399' } },
+    legend: { data: ['尝试', '解决'], textStyle: { color: muted } },
     grid: { left: 90, right: 16, top: 32, bottom: 24 },
-    xAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#909399' } },
-    yAxis: { type: 'category', data: tags.map((x) => x.tag), axisLabel: { color: '#909399' } },
+    xAxis: { type: 'value', minInterval: 1, axisLabel: { color: muted } },
+    yAxis: { type: 'category', data: tags.map((x) => x.tag), axisLabel: { color: muted } },
     series: [
-      { name: '尝试', type: 'bar', data: tags.map((x) => x.attempted), itemStyle: { color: '#8a94a6' } },
-      { name: '解决', type: 'bar', data: tags.map((x) => x.solved), itemStyle: { color: '#67c23a' } },
+      { name: '尝试', type: 'bar', data: tags.map((x) => x.attempted), itemStyle: { color: muted } },
+      { name: '解决', type: 'bar', data: tags.map((x) => x.solved), itemStyle: { color: cssVar('--ac') } },
     ],
   })
-  for (const c of charts) c.resize()
+  resizeAll()
 }
+
+watchTheme(drawAll)
 
 onMounted(async () => {
   await load()
@@ -154,12 +123,16 @@ onMounted(async () => {
   if (saved) {
     try { heatPlatforms.value = JSON.parse(saved) as string[] } catch { /* ignore */ }
   }
-  resizeHandler = () => { for (const c of charts) c.resize() }
-  window.addEventListener('resize', resizeHandler)
 })
 
 const extPlatformNames = computed(() =>
   Object.keys(profile.value?.platforms?.[0]?.by_platform ?? {}))
+
+function togglePlatform(p: string, checked: boolean) {
+  if (checked) heatPlatforms.value = [...heatPlatforms.value, p]
+  else heatPlatforms.value = heatPlatforms.value.filter((x) => x !== p)
+  persistPlatforms()
+}
 
 function persistPlatforms() {
   localStorage.setItem('oj_heat_platforms', JSON.stringify(heatPlatforms.value))
@@ -178,12 +151,6 @@ async function load() {
   drawAll()
 }
 
-onBeforeUnmount(() => {
-  if (resizeHandler) window.removeEventListener('resize', resizeHandler)
-  for (const c of charts) c.dispose()
-  charts.length = 0
-})
-
 const acRate = computed(() => {
   if (!profile.value) return '0'
   const total = Object.values(profile.value.by_status).reduce((a, b) => a + b, 0)
@@ -193,71 +160,89 @@ const acRate = computed(() => {
 
 <template>
   <div v-if="profile">
-    <el-card>
-      <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+    <Card>
+      <CardContent class="flex flex-wrap items-center gap-4 p-6">
         <div>
-          <h2 style="margin: 0">{{ profile.user.nickname || profile.user.username }}</h2>
-          <span style="color: #909399">@{{ profile.user.username }}</span>
+          <h2 class="m-0 text-xl font-semibold">{{ profile.user.nickname || profile.user.username }}</h2>
+          <span class="text-muted-foreground">@{{ profile.user.username }}</span>
         </div>
-        <el-tag v-if="profile.user.role === 'admin'" type="danger">admin</el-tag>
-        <el-tag v-else-if="profile.user.role === 'setter'">setter</el-tag>
-        <span style="flex: 1" />
-        <div style="display: flex; gap: 24px; text-align: center">
-          <div><el-statistic title="已解决题目" :value="profile.ac_problems" /></div>
-          <div><el-statistic title="尝试题目" :value="profile.tried_problems" /></div>
-          <div><el-statistic title="AC 率" :value="acRate" /></div>
+        <Badge v-if="profile.user.role === 'admin'" variant="destructive">admin</Badge>
+        <Badge v-else-if="profile.user.role === 'setter'">setter</Badge>
+        <span class="flex-1" />
+        <div class="flex gap-6 text-center">
+          <Stat label="已解决题目" :value="profile.ac_problems" />
+          <Stat label="尝试题目" :value="profile.tried_problems" />
+          <Stat label="AC 率" :value="acRate" />
         </div>
-      </div>
-    </el-card>
+      </CardContent>
+    </Card>
 
-    <el-card style="margin-top: 12px">
-      <el-alert
-        v-for="err in chartErrors"
-        :key="err"
-        :title="err"
-        type="error"
-        :closable="false"
-        style="margin-bottom: 8px"
-      />
-      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px">
-        <h4 style="margin: 0">近一年活跃度</h4>
-        <span style="color: #909399; font-size: 12px">合并平台：</span>
-        <el-tag size="small" :type="heatPlatforms.length === 0 ? 'success' : 'info'">本站（始终包含）</el-tag>
-        <el-checkbox-group v-model="heatPlatforms" style="display: inline-flex; gap: 8px" @change="persistPlatforms">
-          <el-checkbox v-for="p in extPlatformNames" :key="p" :value="p" :label="p" />
-        </el-checkbox-group>
-      </div>
-      <div ref="heatRef" style="width: 100%; height: 180px" />
-      <div v-if="extPlatformNames.length" style="color: #909399; font-size: 12px">
-        外部平台数据来自「<router-link to="/external">刷题统计</router-link>」的账号绑定，每小时自动同步。
-      </div>
-    </el-card>
+    <Card class="mt-3">
+      <CardContent class="p-6">
+        <Alert
+          v-for="err in chartErrors"
+          :key="err"
+          variant="error"
+          :title="err"
+          class="mb-2"
+        />
+        <div class="mb-1 flex flex-wrap items-center gap-3">
+          <h4 class="m-0 text-base font-semibold">近一年活跃度</h4>
+          <span class="text-xs text-muted-foreground">合并平台：</span>
+          <Badge :variant="heatPlatforms.length === 0 ? 'ac' : 'secondary'">本站（始终包含）</Badge>
+          <label
+            v-for="p in extPlatformNames"
+            :key="p"
+            class="inline-flex cursor-pointer items-center gap-2 text-sm"
+          >
+            <Checkbox
+              :model-value="heatPlatforms.includes(p)"
+              @update:model-value="togglePlatform(p, $event)"
+            />
+            <span>{{ p }}</span>
+          </label>
+        </div>
+        <div ref="heatRef" class="h-[180px] w-full" />
+        <div v-if="extPlatformNames.length" class="text-xs text-muted-foreground">
+          外部平台数据来自「<router-link to="/external" class="text-primary hover:underline">刷题统计</router-link>」的账号绑定，每小时自动同步。
+        </div>
+      </CardContent>
+    </Card>
 
-    <el-row :gutter="12" style="margin-top: 12px">
-      <el-col :xs="24" :md="14">
-        <el-card><h4 style="margin-top: 0">近 30 天趋势</h4><div ref="trendRef" style="width: 100%; height: 280px" /></el-card>
-      </el-col>
-      <el-col :xs="24" :md="10">
-        <el-card><h4 style="margin-top: 0">提交状态分布</h4><div ref="pieRef" style="width: 100%; height: 280px" /></el-card>
-      </el-col>
-    </el-row>
+    <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[7fr_5fr]">
+      <Card>
+        <CardContent class="p-6">
+          <h4 class="mb-2 text-base font-semibold">近 30 天趋势</h4>
+          <div ref="trendRef" class="h-[280px] w-full" />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent class="p-6">
+          <h4 class="mb-2 text-base font-semibold">提交状态分布</h4>
+          <div ref="pieRef" class="h-[280px] w-full" />
+        </CardContent>
+      </Card>
+    </div>
 
-    <el-card style="margin-top: 12px">
-      <h4 style="margin-top: 0">标签强弱分布（按尝试排序）</h4>
-      <div ref="tagRef" style="width: 100%; height: 300px" />
-      <el-alert
-        v-if="profile.tags.length === 0"
-        title="暂无标签数据——提交的题目带有标签后，这里会展示强弱项分布"
-        type="info"
-        :closable="false"
-      />
-    </el-card>
+    <Card class="mt-3">
+      <CardContent class="p-6">
+        <h4 class="mb-2 text-base font-semibold">标签强弱分布（按尝试排序）</h4>
+        <div ref="tagRef" class="h-[300px] w-full" />
+        <Alert
+          v-if="profile.tags.length === 0"
+          variant="info"
+          title="暂无标签数据——提交的题目带有标签后，这里会展示强弱项分布"
+        />
+      </CardContent>
+    </Card>
 
-    <el-card style="margin-top: 12px">
-      <h4 style="margin-top: 0">提交状态明细</h4>
-      <p v-for="(n, s) in profile.by_status" :key="s" style="margin: 4px 0; display: inline-block; margin-right: 16px">
-        <StatusTag :status="s" /> × {{ n }}
-      </p>
-    </el-card>
+    <Card class="mt-3">
+      <CardContent class="p-6">
+        <h4 class="mb-2 text-base font-semibold">提交状态明细</h4>
+        <p v-for="(n, s) in profile.by_status" :key="s" class="my-1 mr-4 inline-block">
+          <StatusTag :status="s" /> × {{ n }}
+        </p>
+      </CardContent>
+    </Card>
   </div>
 </template>

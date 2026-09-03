@@ -33,6 +33,8 @@ export interface User {
   nickname: string
   role: string
   student_no?: string
+  // /admin/users serializes the full model; login/me responses omit this
+  banned?: boolean
 }
 
 export interface Problem {
@@ -85,6 +87,8 @@ export interface CaseResult {
   time_ms: number
   mem_kb: number
   message?: string
+  // per-case partial score (IOI problems; backend sends it, omitted otherwise)
+  score?: number
 }
 
 export interface Submission {
@@ -95,6 +99,8 @@ export interface Submission {
   language: string
   code_size: number
   status: string
+  // total score (IOI); backend always sends it in the detail response
+  score?: number
   time_ms: number
   memory_kb: number
   compile_message?: string

@@ -4,6 +4,9 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Lists, type ProblemListSummary } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Empty } from '@/components/ui/empty'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -22,29 +25,32 @@ onMounted(load)
 </script>
 
 <template>
-  <div v-loading="loading">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px">
-      <h2 style="margin: 0">训练题单</h2>
-      <el-button
-        v-if="auth.canManage"
-        type="primary"
-        @click="router.push('/lists/new')"
-      >
+  <div>
+    <div class="mb-3 flex items-center justify-between">
+      <h2 class="m-0 text-xl font-semibold">训练题单</h2>
+      <Button v-if="auth.canManage" @click="router.push('/lists/new')">
         新建题单
-      </el-button>
+      </Button>
     </div>
-    <el-empty v-if="lists.length === 0" description="还没有题单" />
-    <el-row :gutter="16">
-      <el-col v-for="l in lists" :key="l.id" :xs="24" :sm="12" :md="8" style="margin-bottom: 16px">
-        <el-card shadow="hover" style="cursor: pointer" @click="router.push(`/lists/${l.id}`)">
-          <h3 style="margin: 0 0 8px">{{ l.title }}</h3>
-          <p style="color: #909399; font-size: 13px; min-height: 2em; margin: 0 0 8px">{{ l.description || '（无描述）' }}</p>
-          <div style="display: flex; justify-content: space-between; color: #909399; font-size: 12px">
+    <Empty v-if="!loading && lists.length === 0" description="还没有题单" />
+    <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+      <Card
+        v-for="l in lists"
+        :key="l.id"
+        class="cursor-pointer transition-shadow hover:shadow-md"
+        @click="router.push(`/lists/${l.id}`)"
+      >
+        <CardContent class="p-6">
+          <h3 class="mb-2 mt-0">{{ l.title }}</h3>
+          <p class="mb-2 mt-0 min-h-[2em] text-[13px] text-muted-foreground">
+            {{ l.description || '（无描述）' }}
+          </p>
+          <div class="flex justify-between text-xs text-muted-foreground">
             <span>{{ l.problem_count }} 题</span>
             <span>{{ new Date(l.created_at).toLocaleDateString() }}</span>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </CardContent>
+      </Card>
+    </div>
   </div>
 </template>

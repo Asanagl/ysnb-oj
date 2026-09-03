@@ -3,6 +3,16 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Lists, type ProblemListItemView } from '../api/client'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 const router = useRouter()
 const listId = computed(() => Number(router.currentRoute.value.params.id))
@@ -12,9 +22,9 @@ const editable = ref(false)
 const loading = ref(false)
 
 const progressTag = (p: string) =>
-  p === 'ac' ? { text: '已 AC', type: 'success' as const }
-  : p === 'tried' ? { text: '尝试过', type: 'warning' as const }
-  : { text: '未做', type: 'info' as const }
+  p === 'ac' ? { text: '已 AC', variant: 'ac' as const }
+  : p === 'tried' ? { text: '尝试过', variant: 'tle' as const }
+  : { text: '未做', variant: 'secondary' as const }
 
 async function load() {
   loading.value = true
@@ -35,39 +45,47 @@ function openProblem(row: ProblemListItemView) {
 </script>
 
 <template>
-  <div v-loading="loading">
+  <div>
+    <p v-if="loading && !list" class="text-sm text-muted-foreground">加载中…</p>
     <template v-if="list">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 style="margin: 0">{{ list.title }}</h2>
-          <p style="color: #909399; margin: 6px 0 0">{{ list.description }}</p>
+          <h2 class="m-0">{{ list.title }}</h2>
+          <p class="mt-1.5 mb-0 text-muted-foreground">{{ list.description }}</p>
         </div>
-        <el-button v-if="editable" @click="router.push(`/lists/${list.id}/edit`)">编辑题单</el-button>
+        <Button v-if="editable" @click="router.push(`/lists/${list.id}/edit`)">编辑题单</Button>
       </div>
-      <el-table :data="items" @row-click="openProblem" style="cursor: pointer">
-        <el-table-column label="#" width="60">
-          <template #default="{ $index }">{{ $index + 1 }}</template>
-        </el-table-column>
-        <el-table-column label="题目" min-width="220">
-          <template #default="{ row }">
-            <span style="font-weight: 500">{{ row.title }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="时限" width="100">
-          <template #default="{ row }">{{ row.time_limit_ms }}ms</template>
-        </el-table-column>
-        <el-table-column label="内存" width="100">
-          <template #default="{ row }">{{ row.mem_limit_mb }}MB</template>
-        </el-table-column>
-        <el-table-column label="备注" prop="item.note" min-width="120" />
-        <el-table-column label="我的进度" width="110">
-          <template #default="{ row }">
-            <el-tag :type="progressTag(row.progress).type" size="small">
-              {{ progressTag(row.progress).text }}
-            </el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-[60px]">#</TableHead>
+            <TableHead>题目</TableHead>
+            <TableHead class="w-[100px]">时限</TableHead>
+            <TableHead class="w-[100px]">内存</TableHead>
+            <TableHead>备注</TableHead>
+            <TableHead class="w-[110px]">我的进度</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow
+            v-for="(row, index) in items"
+            :key="row.item.problem_id"
+            class="cursor-pointer"
+            @click="openProblem(row)"
+          >
+            <TableCell>{{ index + 1 }}</TableCell>
+            <TableCell><span class="font-medium">{{ row.title }}</span></TableCell>
+            <TableCell>{{ row.time_limit_ms }}ms</TableCell>
+            <TableCell>{{ row.mem_limit_mb }}MB</TableCell>
+            <TableCell>{{ row.item.note }}</TableCell>
+            <TableCell>
+              <Badge :variant="progressTag(row.progress).variant">
+                {{ progressTag(row.progress).text }}
+              </Badge>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
     </template>
   </div>
 </template>

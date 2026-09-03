@@ -1,8 +1,26 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Submissions } from '../api/client'
 import StatusTag from '../components/StatusTag.vue'
+import { Card, CardContent } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Pagination } from '@/components/ui/pagination'
 
 const router = useRouter()
 const items = ref<Awaited<ReturnType<typeof Submissions.list>>['items']>([])
@@ -10,6 +28,10 @@ const total = ref(0)
 const page = ref(1)
 const mine = ref(false)
 const status = ref('')
+// reka-ui 的 SelectItem 不允许空字符串 value，用 'ALL' 哨兵表示不筛选状态
+const statusSelect = ref('ALL')
+
+const statusOptions = ['AC', 'WA', 'TLE', 'MLE', 'RE', 'CE', 'SE', 'PENDING', 'JUDGING']
 
 async function load() {
   const params: Record<string, unknown> = { page: page.value, size: 20 }
@@ -20,43 +42,83 @@ async function load() {
   total.value = r.total
 }
 
+watch(mine, () => {
+  page.value = 1
+  load()
+})
+
+watch(statusSelect, (v) => {
+  status.value = v === 'ALL' ? '' : v
+  page.value = 1
+  load()
+})
+
+function onPageChange(p: number) {
+  page.value = p
+  load()
+}
+
 onMounted(load)
 </script>
 
 <template>
-  <el-card>
-    <div style="display: flex; gap: 12px; margin-bottom: 12px">
-      <el-checkbox v-model="mine" label="只看我的" @change="page = 1; load()" />
-      <el-select v-model="status" placeholder="状态" clearable style="width: 160px" @change="page = 1; load()">
-        <el-option v-for="s in ['AC', 'WA', 'TLE', 'MLE', 'RE', 'CE', 'SE', 'PENDING', 'JUDGING']" :key="s" :label="s" :value="s" />
-      </el-select>
-    </div>
-    <el-table :data="items" @row-click="(row: { id: number }) => router.push(`/submissions/${row.id}`)">
-      <el-table-column label="#" prop="id" width="80" />
-      <el-table-column label="用户" prop="user_id" width="90" />
-      <el-table-column label="题目" prop="problem_id" width="90" />
-      <el-table-column label="状态">
-        <template #default="{ row }"><StatusTag :status="row.status" /></template>
-      </el-table-column>
-      <el-table-column label="耗时" width="100">
-        <template #default="{ row }">{{ row.time_ms }} ms</template>
-      </el-table-column>
-      <el-table-column label="内存" width="110">
-        <template #default="{ row }">{{ row.memory_kb }} KB</template>
-      </el-table-column>
-      <el-table-column label="语言" prop="language" width="110" />
-      <el-table-column label="代码量" prop="code_size" width="110" />
-      <el-table-column label="提交时间">
-        <template #default="{ row }">{{ new Date(row.created_at).toLocaleString() }}</template>
-      </el-table-column>
-    </el-table>
-    <el-pagination
-      v-model:current-page="page"
-      layout="prev, pager, next"
-      :total="total"
-      :page-size="20"
-      style="margin-top: 12px"
-      @current-change="load"
-    />
-  </el-card>
+  <Card>
+    <CardContent class="pt-6">
+      <div class="mb-3 flex items-center gap-3">
+        <label class="flex cursor-pointer items-center gap-2 text-sm">
+          <Checkbox v-model="mine" />
+          只看我的
+        </label>
+        <Select v-model="statusSelect">
+          <SelectTrigger class="w-[160px]">
+            <SelectValue placeholder="状态" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">全部状态</SelectItem>
+            <SelectItem v-for="s in statusOptions" :key="s" :value="s">{{ s }}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-[80px]">#</TableHead>
+            <TableHead class="w-[90px]">用户</TableHead>
+            <TableHead class="w-[90px]">题目</TableHead>
+            <TableHead>状态</TableHead>
+            <TableHead class="w-[100px]">耗时</TableHead>
+            <TableHead class="w-[110px]">内存</TableHead>
+            <TableHead class="w-[110px]">语言</TableHead>
+            <TableHead class="w-[110px]">代码量</TableHead>
+            <TableHead>提交时间</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow
+            v-for="row in items"
+            :key="row.id"
+            class="cursor-pointer"
+            @click="router.push(`/submissions/${row.id}`)"
+          >
+            <TableCell>{{ row.id }}</TableCell>
+            <TableCell>{{ row.user_id }}</TableCell>
+            <TableCell>{{ row.problem_id }}</TableCell>
+            <TableCell><StatusTag :status="row.status" /></TableCell>
+            <TableCell>{{ row.time_ms }} ms</TableCell>
+            <TableCell>{{ row.memory_kb }} KB</TableCell>
+            <TableCell>{{ row.language }}</TableCell>
+            <TableCell>{{ row.code_size }}</TableCell>
+            <TableCell>{{ new Date(row.created_at).toLocaleString() }}</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      <Pagination
+        :page="page"
+        :page-size="20"
+        :total="total"
+        class="mt-3"
+        @update:page="onPageChange"
+      />
+    </CardContent>
+  </Card>
 </template>

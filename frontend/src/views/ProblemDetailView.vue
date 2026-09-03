@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import {
   Problems,
   Solutions,
+  Submissions,
   connectWS,
   errMsg,
   type ProblemSolution,
@@ -14,6 +14,35 @@ import { renderStatement } from '../utils/markdown'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import CodeEditor from '../components/CodeEditor.vue'
 import StatusTag from '../components/StatusTag.vue'
+import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Empty } from '@/components/ui/empty'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -77,7 +106,7 @@ function openEdit(sol: ProblemSolution) {
 
 async function saveSolution() {
   if (!solForm.value.body_html.trim()) {
-    ElMessage.warning('内容不能为空')
+    toast.warning('内容不能为空')
     return
   }
   try {
@@ -96,9 +125,9 @@ async function saveSolution() {
     }
     solutions.value = await Solutions.list(route.params.id as string)
     editorOpen.value = false
-    ElMessage.success('已保存')
+    toast.success('已保存')
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -109,7 +138,7 @@ async function toggleOfficial(sol: ProblemSolution) {
     })
     solutions.value = await Solutions.list(route.params.id as string)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -118,7 +147,7 @@ async function deleteSolution(sol: ProblemSolution) {
     await Solutions.remove(route.params.id as string, sol.id)
     solutions.value = await Solutions.list(route.params.id as string)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   }
 }
 
@@ -132,10 +161,10 @@ async function submit() {
       code: code.value,
     })
     lastSub.value = sub
-    ElMessage.success('已提交，等待判题')
+    toast.success('已提交，等待判题')
     pollSubmission(sub.id)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   } finally {
     submitting.value = false
   }
@@ -154,8 +183,6 @@ async function pollSubmission(id: number) {
   }
 }
 
-import { Submissions } from '../api/client'
-
 const topLevel = computed(() => solutions.value.filter((s) => !s.parent_id))
 const repliesOf = (id: number) => solutions.value.filter((s) => s.parent_id === id)
 const canEditSolution = (sol: ProblemSolution) =>
@@ -164,177 +191,154 @@ const canEditSolution = (sol: ProblemSolution) =>
 
 <template>
   <div v-if="problem">
-    <el-row :gutter="16">
-      <el-col :span="13">
-        <el-card>
-          <h2>{{ problem.problem.title }}</h2>
-          <p style="color: #909399">
-            时限 {{ problem.problem.time_limit_ms }} ms · 内存 {{ problem.problem.mem_limit_mb }} MB
-            · 测试点 {{ problem.case_count }}
-          </p>
-          <div class="statement" v-html="statementHTML" />
-          <template v-if="samples.length">
-            <h4>样例</h4>
-            <div v-for="(s, i) in samples" :key="i" class="sample-pair">
-              <el-input type="textarea" :model-value="s.input" readonly :rows="3" placeholder="输入" />
-              <el-input type="textarea" :model-value="s.output" readonly :rows="3" placeholder="输出" />
-            </div>
-          </template>
-          <div v-if="problem.problem.hint">
-            <h4>提示</h4>
-            <div class="statement" v-html="renderStatement(problem.problem.hint)" />
+    <div class="grid grid-cols-1 gap-4 lg:grid-cols-[13fr_11fr]">
+      <Card class="p-5">
+        <h2 class="text-xl font-semibold">{{ problem.problem.title }}</h2>
+        <p class="text-muted-foreground">
+          时限 {{ problem.problem.time_limit_ms }} ms · 内存 {{ problem.problem.mem_limit_mb }} MB
+          · 测试点 {{ problem.case_count }}
+        </p>
+        <div class="statement" v-html="statementHTML" />
+        <template v-if="samples.length">
+          <h4 class="text-base font-semibold">样例</h4>
+          <div v-for="(s, i) in samples" :key="i" class="mb-2 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Textarea :model-value="s.input" readonly :rows="3" placeholder="输入" />
+            <Textarea :model-value="s.output" readonly :rows="3" placeholder="输出" />
           </div>
-        </el-card>
-      </el-col>
-      <el-col :span="11">
-        <el-card>
-          <h4>提交代码</h4>
-          <el-select v-model="lang" style="margin-bottom: 8px; width: 220px">
-            <el-option v-for="l in languages" :key="l.id" :label="l.name" :value="l.id" />
-          </el-select>
+        </template>
+        <div v-if="problem.problem.hint">
+          <h4 class="text-base font-semibold">提示</h4>
+          <div class="statement" v-html="renderStatement(problem.problem.hint)" />
+        </div>
+      </Card>
+
+      <div>
+        <Card class="p-5">
+          <h4 class="mb-2 text-base font-semibold">提交代码</h4>
+          <Select v-model="lang">
+            <SelectTrigger class="mb-2 w-[220px]">
+              <SelectValue placeholder="选择语言" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="l in languages" :key="l.id" :value="l.id">{{ l.name }}</SelectItem>
+            </SelectContent>
+          </Select>
           <CodeEditor v-model="code" :language="lang" />
-          <el-button type="primary" style="margin-top: 12px" :loading="submitting" @click="submit">
-            提交
-          </el-button>
-        </el-card>
-        <el-card v-if="lastSub" style="margin-top: 12px">
-          <h4>
+          <Button class="mt-3" :disabled="submitting" @click="submit">
+            {{ submitting ? '提交中…' : '提交' }}
+          </Button>
+        </Card>
+        <Card v-if="lastSub" class="mt-3 p-5">
+          <h4 class="mb-2 flex items-center gap-2 text-base font-semibold">
             最近提交 #{{ lastSub.id }}
             <StatusTag :status="lastSub.status" />
           </h4>
-          <p v-if="lastSub.compile_message" style="white-space: pre-wrap; color: #c0c4cc">
+          <p v-if="lastSub.compile_message" class="whitespace-pre-wrap text-muted-foreground">
             {{ lastSub.compile_message }}
           </p>
-          <el-table v-if="lastSub.cases.length" :data="lastSub.cases" size="small">
-            <el-table-column label="#" prop="index" width="60" />
-            <el-table-column label="状态">
-              <template #default="{ row }"><StatusTag :status="row.status" /></template>
-            </el-table-column>
-            <el-table-column label="耗时" prop="time_ms" width="90" />
-            <el-table-column label="内存" prop="mem_kb" width="90" />
-            <el-table-column label="信息" prop="message" />
-          </el-table>
-        </el-card>
-      </el-col>
-    </el-row>
+          <Table v-if="lastSub.cases.length">
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-[60px]">#</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead class="w-[90px]">耗时</TableHead>
+                <TableHead class="w-[90px]">内存</TableHead>
+                <TableHead>信息</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="c in lastSub.cases" :key="c.index">
+                <TableCell>{{ c.index }}</TableCell>
+                <TableCell><StatusTag :status="c.status" /></TableCell>
+                <TableCell>{{ c.time_ms }}</TableCell>
+                <TableCell>{{ c.mem_kb }}</TableCell>
+                <TableCell>{{ c.message }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </Card>
+      </div>
+    </div>
 
-    <el-card style="margin-top: 16px">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px">
-        <h3 style="margin: 0">题解区<template v-if="!solLocked">（{{ solutions.length }}）</template></h3>
-        <el-button v-if="!solLocked" type="primary" @click="openCreate()">写题解</el-button>
+    <Card class="mt-4 p-5">
+      <div class="mb-2.5 flex items-center justify-between">
+        <h3 class="m-0 text-lg font-semibold">题解区<template v-if="!solLocked">（{{ solutions.length }}）</template></h3>
+        <Button v-if="!solLocked" @click="openCreate()">写题解</Button>
       </div>
 
-      <el-empty v-if="solLocked" :description="solLocked">
-        <template #image><span style="font-size: 42px">🔒</span></template>
-        <p style="color: #909399; font-size: 13px; margin: 0">
+      <div v-if="solLocked" class="flex flex-col items-center gap-2 py-10 text-center">
+        <span class="text-[42px]">🔒</span>
+        <p class="m-0 text-sm text-muted-foreground">{{ solLocked }}</p>
+        <p class="m-0 text-[13px] text-muted-foreground">
           提交一次本题（任意结果）即可解锁题解区；比赛题目将在比赛结束后开放。
         </p>
-      </el-empty>
+      </div>
 
       <template v-else>
-      <div v-for="sol in topLevel" :key="sol.id" class="sol-floor" :class="{ official: sol.is_official }">
-        <div class="sol-head">
-          <el-tag v-if="sol.is_official" type="success" size="small">官方题解</el-tag>
-          <router-link :to="`/users/${sol.user_id}`" class="sol-user">{{ sol.username }}</router-link>
-          <span style="color: #c0c4cc; font-size: 12px">{{ new Date(sol.created_at).toLocaleString() }}</span>
-          <span style="flex: 1" />
-          <el-button v-if="canEditSolution(sol)" size="small" text @click="openEdit(sol)">编辑</el-button>
-          <el-button v-if="isModerator" size="small" :text="true" @click="toggleOfficial(sol)">
+      <div
+        v-for="sol in topLevel"
+        :key="sol.id"
+        class="mb-3 rounded-lg border px-4 py-3"
+        :class="sol.is_official ? 'border-ac bg-ac-bg/40' : 'border-border'"
+      >
+        <div class="mb-2 flex items-center gap-2.5">
+          <Badge v-if="sol.is_official" variant="ac">官方题解</Badge>
+          <router-link :to="`/users/${sol.user_id}`" class="font-semibold text-foreground no-underline hover:text-primary">{{ sol.username }}</router-link>
+          <span class="text-xs text-muted-foreground">{{ new Date(sol.created_at).toLocaleString() }}</span>
+          <span class="flex-1" />
+          <Button v-if="canEditSolution(sol)" variant="ghost" size="sm" @click="openEdit(sol)">编辑</Button>
+          <Button v-if="isModerator" variant="ghost" size="sm" @click="toggleOfficial(sol)">
             {{ sol.is_official ? '取消置顶' : '设为官方' }}
-          </el-button>
-          <el-button v-if="canEditSolution(sol)" size="small" type="danger" text @click="deleteSolution(sol)">删除</el-button>
+          </Button>
+          <Button v-if="canEditSolution(sol)" variant="ghost" size="sm" class="text-destructive" @click="deleteSolution(sol)">删除</Button>
         </div>
-        <div v-if="sol.title" class="sol-title">{{ sol.title }}</div>
+        <div v-if="sol.title" class="mb-1.5 font-semibold">{{ sol.title }}</div>
         <div class="sol-body wysiwyg-render" v-html="sol.body_md" />
-        <div style="margin-top: 6px">
-          <el-button size="small" text @click="openCreate(sol)">回复</el-button>
+        <div class="mt-1.5">
+          <Button variant="ghost" size="sm" @click="openCreate(sol)">回复</Button>
         </div>
-        <div v-for="r in repliesOf(sol.id)" :key="r.id" class="sol-reply">
-          <div class="sol-head">
-            <router-link :to="`/users/${r.user_id}`" class="sol-user">{{ r.username }}</router-link>
-            <span style="color: #c0c4cc; font-size: 12px">{{ new Date(r.created_at).toLocaleString() }}</span>
-            <span style="flex: 1" />
-            <el-button v-if="canEditSolution(r)" size="small" text @click="openEdit(r)">编辑</el-button>
-            <el-button v-if="canEditSolution(r)" size="small" type="danger" text @click="deleteSolution(r)">删除</el-button>
+        <div v-for="r in repliesOf(sol.id)" :key="r.id" class="ml-6 mt-2.5 border-l-[3px] border-border px-0 py-2 pl-3.5">
+          <div class="mb-2 flex items-center gap-2.5">
+            <router-link :to="`/users/${r.user_id}`" class="font-semibold text-foreground no-underline hover:text-primary">{{ r.username }}</router-link>
+            <span class="text-xs text-muted-foreground">{{ new Date(r.created_at).toLocaleString() }}</span>
+            <span class="flex-1" />
+            <Button v-if="canEditSolution(r)" variant="ghost" size="sm" @click="openEdit(r)">编辑</Button>
+            <Button v-if="canEditSolution(r)" variant="ghost" size="sm" class="text-destructive" @click="deleteSolution(r)">删除</Button>
           </div>
           <div class="sol-body wysiwyg-render" v-html="r.body_md" />
         </div>
       </div>
-      <el-empty v-if="topLevel.length === 0" description="还没有题解，来写第一篇吧" />
+      <Empty v-if="topLevel.length === 0" description="还没有题解，来写第一篇吧" />
 
       </template>
 
-      <el-dialog
-        v-model="editorOpen"
-        :title="editorMode === 'edit' ? '编辑题解' : replyTo ? `回复 @${replyTo.username}` : '写题解'"
-        width="72%"
-      >
-        <el-input v-if="!replyTo" v-model="solForm.title" placeholder="标题（可选）" style="margin-bottom: 10px" />
-        <MarkdownEditor v-model="solForm.body_html" placeholder="书写题解内容，支持加粗/标题/代码块/图片/链接…" />
-        <template #footer>
-          <el-button @click="editorOpen = false">取消</el-button>
-          <el-button type="primary" @click="saveSolution">保存</el-button>
-        </template>
-      </el-dialog>
-    </el-card>
+      <Dialog v-model:open="editorOpen">
+        <DialogContent class="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{{ editorMode === 'edit' ? '编辑题解' : replyTo ? `回复 @${replyTo.username}` : '写题解' }}</DialogTitle>
+          </DialogHeader>
+          <Input v-if="!replyTo" v-model="solForm.title" placeholder="标题（可选）" />
+          <MarkdownEditor v-model="solForm.body_html" placeholder="书写题解内容，支持加粗/标题/代码块/图片/链接…" />
+          <DialogFooter>
+            <Button variant="outline" @click="editorOpen = false">取消</Button>
+            <Button @click="saveSolution">保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
   </div>
 </template>
 
 <style scoped>
-.sample-pair {
-  display: flex;
-  gap: 12px;
-}
-@media (max-width: 767.98px) {
-  .sample-pair {
-    display: block;
-  }
-  .sample-pair .el-textarea {
-    margin-bottom: 8px;
-  }
-}
-.sol-floor {
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 12px;
-}
-.sol-floor.official {
-  border-color: #67c23a;
-  background: rgba(103, 194, 58, 0.04);
-}
-.sol-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-.sol-user {
-  font-weight: 600;
-  color: #303133;
-  text-decoration: none;
-}
-.sol-user:hover {
-  color: #409eff;
-}
-.sol-title {
-  font-weight: 600;
-  margin-bottom: 6px;
-}
 .sol-body {
   line-height: 1.75;
-}
-.sol-reply {
-  border-left: 3px solid #ebeef5;
-  padding: 8px 0 8px 14px;
-  margin: 10px 0 0 24px;
 }
 .wysiwyg-render :deep(p) {
   margin: 6px 0;
 }
 .wysiwyg-render :deep(pre) {
-  background: #282c34;
-  color: #abb2bf;
+  background: var(--muted);
+  color: var(--foreground);
   padding: 10px;
   border-radius: 4px;
   overflow-x: auto;
@@ -343,9 +347,9 @@ const canEditSolution = (sol: ProblemSolution) =>
   max-width: 100%;
 }
 .wysiwyg-render :deep(blockquote) {
-  border-left: 3px solid #409eff;
+  border-left: 3px solid var(--primary);
   padding-left: 12px;
-  color: #606266;
+  color: var(--muted-foreground);
   margin-left: 0;
 }
 </style>

@@ -4,12 +4,16 @@ import { EditorView, basicSetup } from 'codemirror'
 import { cpp } from '@codemirror/lang-cpp'
 import { python } from '@codemirror/lang-python'
 import { java } from '@codemirror/lang-java'
+import { oneDark } from '@codemirror/theme-one-dark'
+import { useTheme } from '@/composables/useTheme'
 
 const props = defineProps<{ modelValue: string; language?: string }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>()
 
 const host = ref<HTMLDivElement>()
 let view: EditorView | null = null
+
+const { isDark } = useTheme()
 
 const langExt = computed(() => {
   switch (props.language) {
@@ -28,6 +32,7 @@ function build(value: string) {
     extensions: [
       basicSetup,
       ...langExt.value,
+      ...(isDark.value ? [oneDark] : []),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) emit('update:modelValue', u.state.doc.toString())
       }),
@@ -38,7 +43,8 @@ function build(value: string) {
 
 // why rebuild on language switch: the language extension is fixed at
 // EditorView construction; a full swap is simpler than dynamic reconfigure.
-watch(langExt, () => {
+// Same for the theme: oneDark is a construction-time extension.
+watch([langExt, isDark], () => {
   if (!view) return
   const doc = view.state.doc.toString()
   view.destroy()
@@ -65,14 +71,16 @@ onMounted(() => {
 
 <style>
 .code-editor {
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
+  border: 1px solid var(--input);
+  border-radius: 6px;
   overflow: hidden;
 }
 .code-editor .cm-editor {
   min-height: 320px;
   max-height: 480px;
   text-align: left;
+  background: var(--card);
+  color: var(--foreground);
 }
 /* Phones: a shorter editor keeps the submit button above the fold. */
 @media (max-width: 767.98px) {

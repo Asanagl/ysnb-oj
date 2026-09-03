@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import {
   Contests,
   Problems,
@@ -13,6 +12,26 @@ import {
 import { renderStatement } from '../utils/markdown'
 import CodeEditor from '../components/CodeEditor.vue'
 import StatusTag from '../components/StatusTag.vue'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { toast } from '@/lib/toast'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,7 +68,7 @@ onMounted(async () => {
   contest.value = await Contests.get(cid)
   problem.value = await Problems.get(route.params.pid as string)
   if (problem.value.problem.contest_id !== cid) {
-    ElMessage.error('该题不属于当前比赛')
+    toast.error('该题不属于当前比赛')
     router.push(`/contests/${cid}`)
     return
   }
@@ -72,10 +91,10 @@ async function submit() {
       contest_id: cid,
     })
     lastSub.value = sub
-    ElMessage.success(practice.value ? '补题已提交' : '已提交，等待判题')
+    toast.success(practice.value ? '补题已提交' : '已提交，等待判题')
     pollSubmission(sub.id)
   } catch (e) {
-    ElMessage.error(errMsg(e))
+    toast.error(errMsg(e))
   } finally {
     submitting.value = false
   }
@@ -97,118 +116,88 @@ async function pollSubmission(id: number) {
 
 <template>
   <div v-if="contest && problem">
-    <el-card style="margin-bottom: 12px">
-      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
-        <el-button @click="router.push(`/contests/${cid}`)">返回比赛</el-button>
-        <strong>{{ contest.contest.title }}</strong>
-        <span style="color: #909399">{{ remaining }}</span>
-        <el-tag v-if="practice" type="warning">补题</el-tag>
-      </div>
-    </el-card>
+    <Card class="mb-3">
+      <CardContent class="flex flex-wrap items-center gap-3 p-3">
+        <Button variant="outline" @click="router.push(`/contests/${cid}`)">返回比赛</Button>
+        <strong class="font-semibold">{{ contest.contest.title }}</strong>
+        <span class="text-muted-foreground">{{ remaining }}</span>
+        <Badge v-if="practice" variant="tle">补题</Badge>
+      </CardContent>
+    </Card>
 
-    <div class="pd-grid">
-      <el-card class="pd-statement">
-        <h2>{{ problem.problem.title }}</h2>
-        <p style="color: #909399">
-          时限 {{ problem.problem.time_limit_ms }} ms · 内存 {{ problem.problem.mem_limit_mb }} MB
-        </p>
-        <div class="statement" v-html="statementHTML" />
-        <template v-if="samples.length">
-          <h4>样例</h4>
-          <div v-for="(s, i) in samples" :key="i" class="sample-pair">
-            <el-input type="textarea" :model-value="s.input" readonly :rows="3" placeholder="输入" />
-            <el-input type="textarea" :model-value="s.output" readonly :rows="3" placeholder="输出" />
-          </div>
-        </template>
-      </el-card>
+    <div
+      class="grid grid-cols-1 items-start gap-3 min-[992px]:grid-cols-[minmax(0,52fr)_minmax(0,48fr)] min-[1920px]:grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,4fr)] min-[1920px]:gap-4"
+    >
+      <Card class="min-[992px]:row-span-2 min-[1920px]:row-span-1">
+        <CardContent class="p-6">
+          <h2 class="text-xl font-semibold">{{ problem.problem.title }}</h2>
+          <p class="text-sm text-muted-foreground">
+            时限 {{ problem.problem.time_limit_ms }} ms · 内存 {{ problem.problem.mem_limit_mb }} MB
+          </p>
+          <div class="statement" v-html="statementHTML" />
+          <template v-if="samples.length">
+            <h4 class="mt-4 font-semibold">样例</h4>
+            <div
+              v-for="(s, i) in samples"
+              :key="i"
+              class="mt-2 flex flex-col gap-2 md:flex-row md:gap-3"
+            >
+              <Textarea :model-value="s.input" readonly :rows="3" placeholder="输入" />
+              <Textarea :model-value="s.output" readonly :rows="3" placeholder="输出" />
+            </div>
+          </template>
+        </CardContent>
+      </Card>
 
-      <el-card class="pd-editor">
-        <h4>提交代码</h4>
-        <el-select v-model="lang" style="margin-bottom: 8px; width: min(220px, 100%)">
-          <el-option v-for="l in languages" :key="l.id" :label="l.name" :value="l.id" />
-        </el-select>
-        <CodeEditor v-model="code" :language="lang" />
-        <el-button type="primary" style="margin-top: 12px" :loading="submitting" @click="submit">
-          提交
-        </el-button>
-      </el-card>
+      <Card>
+        <CardContent class="p-6">
+          <h4 class="mb-2 font-semibold">提交代码</h4>
+          <Select v-model="lang">
+            <SelectTrigger class="mb-2 w-[min(220px,100%)]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="l in languages" :key="l.id" :value="l.id">{{ l.name }}</SelectItem>
+            </SelectContent>
+          </Select>
+          <CodeEditor v-model="code" :language="lang" />
+          <Button class="mt-3" :disabled="submitting" @click="submit">
+            {{ submitting ? '提交中…' : '提交' }}
+          </Button>
+        </CardContent>
+      </Card>
 
-      <el-card v-if="lastSub" class="pd-result">
-        <h4>
-          最近提交 #{{ lastSub.id }}
-          <StatusTag :status="lastSub.status" />
-        </h4>
-        <p v-if="lastSub.compile_message" style="white-space: pre-wrap; color: #c0c4cc">
-          {{ lastSub.compile_message }}
-        </p>
-        <el-table v-if="lastSub.cases.length" :data="lastSub.cases" size="small">
-          <el-table-column label="#" prop="index" width="60" />
-          <el-table-column label="状态">
-            <template #default="{ row }"><StatusTag :status="row.status" /></template>
-          </el-table-column>
-          <el-table-column label="耗时" prop="time_ms" width="90" />
-          <el-table-column label="内存" prop="mem_kb" width="90" />
-          <el-table-column label="信息" prop="message" />
-        </el-table>
-      </el-card>
+      <Card v-if="lastSub">
+        <CardContent class="p-6">
+          <h4 class="mb-2 flex items-center gap-2 font-semibold">
+            最近提交 #{{ lastSub.id }}
+            <StatusTag :status="lastSub.status" />
+          </h4>
+          <p v-if="lastSub.compile_message" class="whitespace-pre-wrap text-muted-foreground">
+            {{ lastSub.compile_message }}
+          </p>
+          <Table v-if="lastSub.cases.length">
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-[60px]">#</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead class="w-[90px]">耗时</TableHead>
+                <TableHead class="w-[90px]">内存</TableHead>
+                <TableHead>信息</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="c in lastSub.cases" :key="c.index">
+                <TableCell>{{ c.index }}</TableCell>
+                <TableCell><StatusTag :status="c.status" /></TableCell>
+                <TableCell>{{ c.time_ms }}</TableCell>
+                <TableCell>{{ c.mem_kb }}</TableCell>
+                <TableCell>{{ c.message }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   </div>
 </template>
-
-<style scoped>
-/* Same responsive grid as the bank problem page: stacked on phones,
-   two columns on desktop, three on ultrawide. */
-.pd-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-}
-@media (min-width: 992px) {
-  .pd-grid {
-    grid-template-columns: minmax(0, 52fr) minmax(0, 48fr);
-  }
-  .pd-statement {
-    grid-column: 1;
-    grid-row: 1 / span 2;
-  }
-  .pd-editor {
-    grid-column: 2;
-    grid-row: 1;
-  }
-  .pd-result {
-    grid-column: 2;
-    grid-row: 2;
-  }
-}
-@media (min-width: 1920px) {
-  .pd-grid {
-    gap: 16px;
-    grid-template-columns: minmax(0, 5fr) minmax(0, 4fr) minmax(0, 4fr);
-  }
-  .pd-statement {
-    grid-column: 1;
-    grid-row: 1;
-  }
-  .pd-editor {
-    grid-column: 2;
-    grid-row: 1;
-  }
-  .pd-result {
-    grid-column: 3;
-    grid-row: 1;
-  }
-}
-.sample-pair {
-  display: flex;
-  gap: 12px;
-}
-@media (max-width: 767.98px) {
-  .sample-pair {
-    display: block;
-  }
-  .sample-pair .el-textarea {
-    margin-bottom: 8px;
-  }
-}
-</style>
