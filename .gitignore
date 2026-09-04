@@ -13,6 +13,11 @@ data-smoke/
 frontend/node_modules/
 frontend/dist/
 
+# docs site (VitePress) build artifacts & deps
+node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+
 # runtime / secrets
 .env
 *.db
@@ -29,6 +34,7 @@ oj-judge.env
 # remote-test credentials & artifacts (never public)
 remote-test/.ojenv
 remote-test/.sshenv
+remote-test/admin.env
 remote-test/.credentials-*.txt
 remote-test/oj-api-*
 remote-test/oj-judge-*

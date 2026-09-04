@@ -8,6 +8,7 @@ import {
   KeyRound,
   LogOut,
   Monitor,
+  ScrollText,
   Trophy,
   Users,
   Webhook,
@@ -35,6 +36,7 @@ const items = computed(() => {
     { path: '/admin/contests', label: '比赛管理', icon: Trophy, tier: 'staff' },
     { path: '/admin/users', label: '用户管理', icon: Users, tier: 'admin' },
     { path: '/admin/daemons', label: '判题机监控', icon: Monitor, tier: 'admin' },
+    { path: '/admin/logs', label: '日志查看器', icon: ScrollText, tier: 'admin' },
     { path: '/admin/api-keys', label: 'API 密钥', icon: KeyRound, tier: 'admin' },
     { path: '/admin/plugins', label: '插件系统', icon: Webhook, tier: 'staff' },
   ]

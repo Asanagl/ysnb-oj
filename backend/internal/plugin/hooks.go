@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sync"
@@ -95,7 +95,7 @@ func (w *webhookHook) OnJudgeEvent(event map[string]any) {
 	}
 	for _, url := range targets {
 		if err := w.postOnce(url, body); err != nil {
-			log.Printf("[plugin/webhook] %s: %v", url, err)
+			slog.Warn("plugin webhook delivery failed", "url", url, "err", err)
 		}
 	}
 }

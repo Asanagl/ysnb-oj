@@ -22,6 +22,7 @@ type Config struct {
 	Mode      string `yaml:"mode"`       // dev | prod (dev uses sqlite + memory queue)
 	DataDir   string `yaml:"data_dir"`   // test data / code / checker storage root
 	FetchBase string `yaml:"fetch_base"` // URL daemons use to download testdata
+	LogLevel  string `yaml:"log_level"`  // debug|info|warn|error (OJ_LOG_LEVEL)
 	Database  DB     `yaml:"database"`
 	Redis     Redis  `yaml:"redis"`
 	JWT       JWT    `yaml:"jwt"`
@@ -88,6 +89,9 @@ func Load(cfgPath string) (*Config, error) {
 		cfg.JWT.Secret = randomToken()
 		fmt.Println("[config] dev mode: generated ephemeral JWT secret")
 	}
+	// log_level is normalized here so both entrypoints share one parse; an
+	// unknown value silently maps to INFO (logx.ParseLevel default).
+	cfg.LogLevel = strings.ToLower(strings.TrimSpace(cfg.LogLevel))
 	return cfg, nil
 }
 
@@ -117,6 +121,7 @@ func defaultConfig() *Config {
 		Mode:      "dev",
 		DataDir:   "./data",
 		FetchBase: "http://127.0.0.1:8080",
+		LogLevel:  "info",
 		Database: DB{
 			Driver: "sqlite",
 			DSN:    "./data/oj.db",
@@ -141,6 +146,7 @@ func applyEnv(cfg *Config) {
 	setStr("OJ_MODE", &cfg.Mode)
 	setStr("OJ_DATA_DIR", &cfg.DataDir)
 	setStr("OJ_FETCH_BASE", &cfg.FetchBase)
+	setStr("OJ_LOG_LEVEL", &cfg.LogLevel)
 	setStr("OJ_DB_DRIVER", &cfg.Database.Driver)
 	setStr("OJ_DB_DSN", &cfg.Database.DSN)
 	setStr("OJ_REDIS_ADDR", &cfg.Redis.Addr)

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -20,17 +20,17 @@ import (
 func (h *Hub) RequeuePending(ctx context.Context) {
 	var subs []model.Submission
 	if err := h.DB.Where("status = ?", model.SubPending).Order("id").Find(&subs).Error; err != nil {
-		log.Printf("[judgehub] requeue-pending query: %v", err)
+		slog.Error("judgehub requeue-pending query failed", "err", err)
 		return
 	}
 	for i := range subs {
 		if err := h.Queue.Push(ctx, uint64(subs[i].ID)); err != nil {
-			log.Printf("[judgehub] requeue push %d: %v", subs[i].ID, err)
+			slog.Error("judgehub requeue push failed", "submission", subs[i].ID, "err", err)
 			return
 		}
 	}
 	if len(subs) > 0 {
-		log.Printf("[judgehub] re-enqueued %d pending submissions at startup", len(subs))
+		slog.Info("re-enqueued pending submissions at startup", "count", len(subs))
 	}
 }
 
@@ -51,7 +51,7 @@ func (h *Hub) dispatchLoop(ctx context.Context, conn *daemonConn) {
 		id, ok, err := h.Queue.Pop(ctx)
 		if err != nil || !ok {
 			if err != nil && ctx.Err() == nil {
-				log.Printf("[judgehub] queue pop: %v", err)
+				slog.Error("judgehub queue pop failed", "err", err)
 			}
 			continue
 		}
@@ -66,7 +66,7 @@ func (h *Hub) dispatchLoop(ctx context.Context, conn *daemonConn) {
 func (h *Hub) dispatchOne(ctx context.Context, conn *daemonConn, subID uint64) bool {
 	task, err := h.buildTask(subID)
 	if err != nil {
-		log.Printf("[judgehub] build task %d: %v", subID, err)
+		slog.Warn("judgehub build task failed", "submission", subID, "err", err)
 		h.requeue(&model.Submission{ID: uint(subID), Status: model.SubJudging}, "build failed")
 		return true
 	}
@@ -75,7 +75,7 @@ func (h *Hub) dispatchOne(ctx context.Context, conn *daemonConn, subID uint64) b
 	if err := h.DB.Model(&model.Submission{}).Where("id = ?", subID).Updates(map[string]any{
 		"status": model.SubJudging, "lease_until": lease,
 	}).Error; err != nil {
-		log.Printf("[judgehub] mark judging %d: %v", subID, err)
+		slog.Error("judgehub mark judging failed", "submission", subID, "err", err)
 		return true
 	}
 	conn.active.Add(1)
@@ -88,6 +88,8 @@ func (h *Hub) dispatchOne(ctx context.Context, conn *daemonConn, subID uint64) b
 	case <-conn.done:
 		return false
 	case conn.send <- &pb.ApiMessage{Body: &pb.ApiMessage_Dispatch{Dispatch: &pb.TaskDispatch{Task: task}}}:
+		slog.Debug("task dispatched", "submission", subID, "daemon", conn.info.Name,
+			"problem", task.GetProblemId(), "language", task.GetLanguageId(), "cases", len(task.GetCases()))
 		h.WS.Publish(fmt.Sprintf("submission:%d", subID), map[string]any{
 			"id": subID, "status": model.SubJudging, "at": now,
 		})
@@ -149,7 +151,7 @@ func (h *Hub) buildTask(subID uint64) (*pb.JudgeTask, error) {
 func (h *Hub) finalize(tr *pb.TaskResult) {
 	sub := &model.Submission{}
 	if err := h.DB.First(sub, tr.GetSubmissionId()).Error; err != nil {
-		log.Printf("[judgehub] finalize missing submission %d", tr.GetSubmissionId())
+		slog.Warn("judgehub finalize for missing submission", "submission", tr.GetSubmissionId())
 		return
 	}
 	now := time.Now()
@@ -158,7 +160,7 @@ func (h *Hub) finalize(tr *pb.TaskResult) {
 	// why: SE details used to be dropped, leaving unexplainable verdicts in
 	// the admin UI; surface them where users and operators can see them.
 	if tr.GetError() != "" {
-		log.Printf("[judgehub] submission %d SE: %s", sub.ID, tr.GetError())
+		slog.Error("submission judged SE", "submission", sub.ID, "err", tr.GetError())
 		compileMsg = compileMsg + "\n[judge SE] " + tr.GetError()
 	}
 	updates := map[string]any{
@@ -172,9 +174,16 @@ func (h *Hub) finalize(tr *pb.TaskResult) {
 		"lease_until":     nil,
 	}
 	if err := h.DB.Model(sub).Updates(updates).Error; err != nil {
-		log.Printf("[judgehub] finalize %d: %v", sub.ID, err)
+		slog.Error("judgehub finalize persist failed", "submission", sub.ID, "err", err)
 		return
 	}
+	// INFO summary line: one per judged submission — the primary search
+	// anchor in the admin log viewer (by submission id / verdict).
+	slog.Info("submission judged",
+		"submission", sub.ID, "status", tr.GetStatus(),
+		"time_ms", tr.GetTimeMs(), "memory_kb", tr.GetMemoryKb(),
+		"score", tr.GetScore(), "problem", sub.ProblemID,
+		"user", sub.UserID, "cases", len(tr.GetCases()))
 	payload := map[string]any{
 		"id": sub.ID, "status": tr.GetStatus(), "time_ms": tr.GetTimeMs(),
 		"memory_kb": tr.GetMemoryKb(), "score": tr.GetScore(),

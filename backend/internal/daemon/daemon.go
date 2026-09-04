@@ -6,7 +6,7 @@ package daemon
 import (
 	"context"
 	"io"
-	"log"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -43,7 +43,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	backoff := time.Second
 	for {
 		if err := d.session(ctx); err != nil {
-			log.Printf("[daemon] session ended: %v", err)
+			slog.Warn("session ended; reconnecting", "err", err, "backoff", backoff.String())
 		}
 		select {
 		case <-ctx.Done():
@@ -67,7 +67,7 @@ func (d *Daemon) session(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("[daemon] connected to %s", d.Cfg.Judge.APIEndpoint)
+	slog.Info("connected to api", "endpoint", d.Cfg.Judge.APIEndpoint)
 
 	langs := d.languageIDs()
 	if err := stream.Send(&pb.DaemonMessage{Body: &pb.DaemonMessage_Register{Register: &pb.Register{
@@ -134,7 +134,7 @@ func (d *Daemon) heartbeatLoop(ctx context.Context, stream pb.JudgeRelay_Connect
 				// why log-and-continue: liveness is best-effort; a single
 				// failed heartbeat must not blind the monitor forever while
 				// the stream (results!) keeps working.
-				log.Printf("[daemon] heartbeat send: %v", err)
+				slog.Warn("heartbeat send failed (liveness is best-effort)", "err", err)
 			}
 		}
 	}
@@ -146,12 +146,32 @@ func (d *Daemon) runTask(ctx context.Context, stream pb.JudgeRelay_ConnectClient
 	d.active.Add(1)
 	defer d.active.Add(-1)
 
+	start := time.Now()
 	t := fromPbTask(task)
 	result := d.Service.Run(ctx, t)
+	// INFO summary per submission on the judge side; DEBUG adds the full
+	// per-case breakdown (compile stderr tail, per-case time/mem/signal).
+	slog.Info("task finished",
+		"submission", task.SubmissionId, "status", result.Status,
+		"time_ms", result.TimeMS, "memory_kb", result.MemKB,
+		"duration_ms", time.Since(start).Milliseconds())
 	if result.Status == "SE" || result.Error != "" {
 		// why log here: SE means infrastructure trouble on this machine; the
 		// daemon log is the first place an operator looks.
-		log.Printf("[daemon] task %d SE: %s", task.SubmissionId, result.Error)
+		slog.Error("task SE (infrastructure trouble)", "submission", task.SubmissionId, "err", result.Error)
+	}
+	if slog.Default().Enabled(ctx, slog.LevelDebug) {
+		for _, c := range result.Cases {
+			attrs := []any{"case", c.Index, "status", c.Status,
+				"time_ms", c.TimeMS, "mem_kb", c.MemKB, "score", c.Score}
+			if c.Message != "" {
+				attrs = append(attrs, "message", c.Message)
+			}
+			slog.Debug("case detail", append([]any{"submission", task.SubmissionId}, attrs...)...)
+		}
+		if result.CompileMessage != "" {
+			slog.Debug("compile stderr tail", "submission", task.SubmissionId, "tail", result.CompileMessage)
+		}
 	}
 	if err := d.send(stream, &pb.DaemonMessage{Body: &pb.DaemonMessage_Result{Result: &pb.TaskResult{
 		SubmissionId:   task.SubmissionId,
@@ -163,7 +183,7 @@ func (d *Daemon) runTask(ctx context.Context, stream pb.JudgeRelay_ConnectClient
 		Cases:          toPbCases(result.Cases),
 		Error:          result.Error,
 	}}}); err != nil {
-		log.Printf("[daemon] send result %d: %v", task.SubmissionId, err)
+		slog.Error("send result failed (will be re-leased)", "submission", task.SubmissionId, "err", err)
 	}
 }
 

@@ -7,7 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -22,6 +22,7 @@ import (
 	"github.com/ysnb/oj/internal/config"
 	"github.com/ysnb/oj/internal/handler"
 	"github.com/ysnb/oj/internal/judgehub"
+	"github.com/ysnb/oj/internal/logx"
 	"github.com/ysnb/oj/internal/model"
 	"github.com/ysnb/oj/internal/queue"
 	"github.com/ysnb/oj/internal/store"
@@ -40,7 +41,10 @@ func main() {
 		cfgPath = os.Args[2]
 	}
 	if err := run(cfgPath); err != nil {
-		log.Fatalf("[api] %v", err)
+		// structured logger may not exist yet if config loading failed;
+		// logx.Init in run covers the rest of the lifetime.
+		slog.Error("api", "err", err)
+		os.Exit(1)
 	}
 }
 
@@ -49,17 +53,19 @@ func run(cfgPath string) error {
 	if err != nil {
 		return err
 	}
+	logx.Init(logx.ParseLevel(cfg.LogLevel))
+	slog.Info("api starting", "mode", cfg.Mode, "listen", cfg.Listen, "log_level", cfg.LogLevel)
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
 	}
 	if cfg.JWT.Secret == "" && cfg.Mode == "dev" {
 		// Dev-only convenience: ephemeral secret, never a literal in source.
 		cfg.JWT.Secret = randomSecret()
-		log.Printf("[api] dev mode: generated ephemeral OJ_JWT_SECRET")
+		slog.Warn("dev mode: generated ephemeral OJ_JWT_SECRET")
 	}
 	if cfg.JWT.DaemonSecret == "" {
 		cfg.JWT.DaemonSecret = randomSecret()
-		log.Printf("[api] OJ_DAEMON_SECRET not set; generated one for this run")
+		slog.Warn("OJ_DAEMON_SECRET not set; generated one for this run")
 	}
 
 	db, err := store.Open(cfg)
@@ -95,13 +101,13 @@ func run(cfgPath string) error {
 	go func() {
 		lis, err := net.Listen("tcp", cfg.GRPCAddr)
 		if err != nil {
-			log.Printf("[api] grpc listen: %v", err)
+			slog.Error("grpc listen", "err", err)
 			stop()
 			return
 		}
-		log.Printf("[api] grpc listening on %s", cfg.GRPCAddr)
+		slog.Info("grpc listening", "addr", cfg.GRPCAddr)
 		if err := grpcSrv.Serve(lis); err != nil {
-			log.Printf("[api] grpc serve: %v", err)
+			slog.Error("grpc serve", "err", err)
 		}
 	}()
 
@@ -123,9 +129,9 @@ func run(cfgPath string) error {
 		MaxHeaderBytes:    1 << 20,
 	}
 	go func() {
-		log.Printf("[api] http listening on %s", cfg.Listen)
+		slog.Info("http listening", "addr", cfg.Listen)
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("[api] http: %v", err)
+			slog.Error("http serve", "err", err)
 			stop()
 		}
 	}()
@@ -135,7 +141,7 @@ func run(cfgPath string) error {
 	defer cancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
 	grpcSrv.GracefulStop()
-	log.Printf("[api] stopped")
+	slog.Info("api stopped")
 	return nil
 }
 
@@ -149,7 +155,7 @@ func bootstrapAdmin(db *gorm.DB) error {
 	}
 	username, password := os.Getenv("OJ_ADMIN_USERNAME"), os.Getenv("OJ_ADMIN_PASSWORD")
 	if username == "" || password == "" {
-		log.Printf("[api] no users yet; set OJ_ADMIN_USERNAME/OJ_ADMIN_PASSWORD to create the first admin")
+		slog.Warn("no users yet; set OJ_ADMIN_USERNAME/OJ_ADMIN_PASSWORD to create the first admin")
 		return nil
 	}
 	hash, err := auth.HashPassword(password)
@@ -162,7 +168,7 @@ func bootstrapAdmin(db *gorm.DB) error {
 	}).Error; err != nil {
 		return fmt.Errorf("bootstrap admin: %w", err)
 	}
-	log.Printf("[api] bootstrap admin %q created", username)
+	slog.Info("bootstrap admin created", "username", username)
 	return nil
 }
 

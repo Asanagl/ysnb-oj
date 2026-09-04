@@ -11,13 +11,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/ysnb/oj/internal/config"
 	"github.com/ysnb/oj/internal/daemon"
+	"github.com/ysnb/oj/internal/logx"
 	"github.com/ysnb/oj/pkg/judge"
 	"github.com/ysnb/oj/pkg/sandbox"
 )
@@ -31,7 +32,7 @@ func constrainedOverridePath(p string) string {
 		return ""
 	}
 	if !strings.HasSuffix(p, ".yaml") && !strings.HasSuffix(p, ".yml") {
-		log.Printf("[judge] OJ_LANGUAGES_FILE %q ignored: only .yaml/.yml accepted", p)
+		slog.Warn("OJ_LANGUAGES_FILE ignored: only .yaml/.yml accepted", "path", p)
 		return ""
 	}
 	if filepath.IsAbs(p) {
@@ -51,8 +52,13 @@ func main() {
 	selftest := flagArg("--selftest")
 	cfg, err := config.Load(configPath())
 	if err != nil {
-		log.Fatalf("[judge] %v", err)
+		// logger not initialized yet (config failed); plain stderr then exit.
+		fmt.Fprintln(os.Stderr, "[judge] config:", err)
+		os.Exit(1)
 	}
+	logx.Init(logx.ParseLevel(cfg.LogLevel))
+	slog.Info("judge starting",
+		"log_level", cfg.LogLevel, "mode", cfg.Mode)
 	sb := &sandbox.Sandbox{
 		CgroupBase: cfg.Judge.CGroupBase,
 		HidePaths:  []string{cfg.DataDir, cfg.Judge.WorkRoot},
@@ -61,14 +67,17 @@ func main() {
 		os.Exit(runSelftest(sb, cfg.Judge.WorkRoot))
 	}
 	if err := os.MkdirAll(cfg.Judge.WorkRoot, 0o750); err != nil {
-		log.Fatalf("[judge] work root: %v", err)
+		slog.Error("work root", "err", err)
+		os.Exit(1)
 	}
 	if err := sb.Preflight(); err != nil {
-		log.Fatalf("[judge] preflight: %v", err)
+		slog.Error("sandbox preflight failed", "err", err)
+		os.Exit(1)
 	}
 	langs, err := judge.NewRegistry(constrainedOverridePath(os.Getenv("OJ_LANGUAGES_FILE")))
 	if err != nil {
-		log.Fatalf("[judge] %v", err)
+		slog.Error("language registry", "err", err)
+		os.Exit(1)
 	}
 	// why Judge.DaemonToken for fetches: it is the same shared secret the
 	// daemon authenticates its gRPC stream with; JWT.DaemonSecret is the
@@ -76,16 +85,19 @@ func main() {
 	svc, err := judge.NewService(sb, langs, cfg.Judge.WorkRoot,
 		cfg.DataDir+"/judge-cache", cfg.FetchBase, cfg.Judge.DaemonToken)
 	if err != nil {
-		log.Fatalf("[judge] %v", err)
+		slog.Error("judge service init", "err", err)
+		os.Exit(1)
 	}
 	if cfg.Judge.DaemonName == "" {
 		cfg.Judge.DaemonName = "judge-1"
 	}
 	d := &daemon.Daemon{Cfg: cfg, Service: svc}
-	log.Printf("[judge] daemon %q starting, parallel=%d, api=%s",
-		cfg.Judge.DaemonName, cfg.Judge.MaxParallel, cfg.Judge.APIEndpoint)
+	slog.Info("daemon starting",
+		"daemon", cfg.Judge.DaemonName, "parallel", cfg.Judge.MaxParallel,
+		"api", cfg.Judge.APIEndpoint)
 	if err := d.Run(context.Background()); err != nil {
-		log.Fatalf("[judge] %v", err)
+		slog.Error("daemon exited", "err", err)
+		os.Exit(1)
 	}
 }
 

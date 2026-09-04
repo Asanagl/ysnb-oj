@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -89,8 +89,9 @@ func (h *Hub) requeue(sub *model.Submission, reason string) {
 	now := time.Now()
 	h.DB.Model(sub).Updates(map[string]any{"status": model.SubPending, "lease_until": nil})
 	if err := h.Queue.Push(context.Background(), uint64(sub.ID)); err != nil {
-		log.Printf("[judgehub] requeue push %d: %v", sub.ID, err)
+		slog.Error("judgehub requeue push failed", "submission", sub.ID, "err", err)
 	}
+	slog.Info("submission requeued", "submission", sub.ID, "reason", reason)
 	h.WS.Publish(fmt.Sprintf("submission:%d", sub.ID), map[string]any{
 		"id": sub.ID, "status": model.SubPending, "reason": reason, "at": now,
 	})
@@ -139,6 +140,8 @@ func (h *Hub) registerConn(stream pb.JudgeRelay_ConnectServer, reg *pb.Register)
 	}
 	h.conns[info.Name] = conn
 	h.mu.Unlock()
+	slog.Info("daemon registered", "daemon", info.Name, "capacity", info.Capacity,
+		"languages", info.Languages, "version", reg.GetVersion())
 
 	go sendLoop(stream, conn)
 	return conn
@@ -178,6 +181,7 @@ func (h *Hub) dropConn(name string, conn *daemonConn) {
 
 	h.DB.Model(&model.JudgeDaemon{}).Where("name = ?", name).
 		Updates(map[string]any{"status": model.DaemonOffline, "active_tasks": 0})
+	slog.Warn("daemon disconnected", "daemon", name, "orphaned_tasks", len(orphaned))
 	for _, subID := range orphaned {
 		sub := &model.Submission{}
 		if err := h.DB.First(sub, subID).Error; err == nil && sub.Status == model.SubJudging {

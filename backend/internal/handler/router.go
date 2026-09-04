@@ -3,6 +3,8 @@
 package handler
 
 import (
+	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -39,7 +41,17 @@ func (s *Server) Router() *gin.Engine {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	// Access log through slog (JSON → journald) and panic recovery with
+	// structured logging; gin.DefaultWriter/Recovery output used to bypass
+	// the level system entirely.
+	slogWriter := newGinSlogWriter()
+	ginErrWriter := ginErrorWriter()
+	gin.DefaultWriter = slogWriter
+	gin.DefaultErrorWriter = ginErrWriter
+	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{Output: slogWriter}), gin.CustomRecovery(func(c *gin.Context, rec any) {
+		slog.Error("gin panic recovered", "path", c.Request.URL.Path, "panic", rec)
+		c.AbortWithStatus(500)
+	}))
 	// Behind nginx we are single-proxy: only trust loopback, otherwise a
 	// forged X-Forwarded-For rewrites c.ClientIP() and defeats the login/
 	// register per-IP limiters (P0 from the security review).
@@ -154,6 +166,9 @@ func (s *Server) Router() *gin.Engine {
 	admin.DELETE("/invite-codes/:id", s.deleteInviteCode)
 	admin.GET("/daemons", s.listDaemons)
 	admin.POST("/rejudge/:id", s.rejudge)
+	// log viewer: read-only journald tail of the two OJ units (constant
+	// argv, admin-gated — see admin_logs.go's security model comment).
+	admin.GET("/logs", s.adminLogs)
 
 	// super-admin tier: granting/revoking admin & super_admin, and bans.
 	// why: role escalation and ban decisions outrank ordinary administration;
@@ -256,3 +271,24 @@ func (s *Server) wsAuth() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// ginSlogWriter adapts gin's io.Writer logging into slog at INFO (access)
+// / ERROR (default error writer) level, so request logs share the JSON
+// pipeline instead of writing raw lines to stdout.
+type ginSlogWriter struct{ errLevel bool }
+
+func newGinSlogWriter() *ginSlogWriter { return &ginSlogWriter{} }
+
+func ginErrorWriter() io.Writer { return &ginSlogWriter{errLevel: true} }
+
+func (w *ginSlogWriter) Write(p []byte) (int, error) {
+	line := strings.TrimRight(string(p), "\n")
+	if w.errLevel {
+		slog.Error("gin", "raw", line)
+	} else {
+		slog.Info("http access", "raw", line)
+	}
+	return len(p), nil
+}
+
+var _ io.Writer = (*ginSlogWriter)(nil)

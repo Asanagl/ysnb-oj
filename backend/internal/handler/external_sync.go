@@ -7,7 +7,7 @@ package handler
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/ysnb/oj/internal/plugin"
@@ -77,7 +77,7 @@ func (s *Server) StartExternalSyncScanner(ctx context.Context) {
 func (s *Server) syncAllBindings(ctx context.Context) {
 	var bindings []ExternalBinding
 	if err := s.DB.Find(&bindings).Error; err != nil {
-		log.Printf("[external-sync] list bindings: %v", err)
+		slog.Error("external-sync list bindings failed", "err", err)
 		return
 	}
 	for i := range bindings {
@@ -86,8 +86,13 @@ func (s *Server) syncAllBindings(ctx context.Context) {
 			return
 		default:
 		}
-		if _, lastErr := s.syncBinding(&bindings[i], false); lastErr != "" {
-			log.Printf("[external-sync] %s/%s: %s", bindings[i].Platform, bindings[i].Handle, lastErr)
+		stored, lastErr := s.syncBinding(&bindings[i], false)
+		if lastErr != "" {
+			slog.Warn("external-sync binding failed",
+				"platform", bindings[i].Platform, "handle", bindings[i].Handle, "err", lastErr)
+		} else if stored > 0 {
+			slog.Info("external-sync stored new records",
+				"platform", bindings[i].Platform, "handle", bindings[i].Handle, "stored", stored)
 		}
 		// space sequential platform hits; rate-limits are per-source
 		time.Sleep(2 * time.Second)

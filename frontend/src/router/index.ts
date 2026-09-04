@@ -20,6 +20,7 @@ const router = createRouter({
         { path: 'contests', component: () => import('../views/AdminContestsView.vue'), meta: { roles: ['admin', 'setter', 'super_admin'] } },
         { path: 'users', component: () => import('../views/AdminUsersView.vue'), meta: { roles: ['admin', 'super_admin'] } },
         { path: 'daemons', component: () => import('../views/AdminDaemonsView.vue'), meta: { roles: ['admin', 'super_admin'] } },
+        { path: 'logs', component: () => import('../views/AdminLogsView.vue'), meta: { roles: ['admin', 'super_admin'] } },
         { path: 'api-keys', component: () => import('../views/AdminApiKeysView.vue'), meta: { roles: ['admin', 'super_admin'] } },
         { path: 'plugins', component: () => import('../views/AdminPluginsView.vue'), meta: { roles: ['admin', 'setter', 'super_admin'] } },
       ],

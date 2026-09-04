@@ -646,6 +646,11 @@ export const Admin = {
     const r = await api.get('/admin/daemons')
     return r.data as { daemons: { id: number; name: string; status: string; capacity: number; active_tasks: number; last_heartbeat: string | null }[]; queue_length: number }
   },
+  // 日志查看器：oj-api/oj-judge 的 journald 最近日志（admin 页）
+  async logs(unit: 'all' | 'api' | 'judge', q: string, lines: number) {
+    const r = await api.get('/admin/logs', { params: { unit, q, lines, hours: 24 } })
+    return r.data as { entries: { ts: string; unit: string; level: string; msg: string }[]; window_hours: number; max_lines: number }
+  },
   async rejudge(id: number) {
     const r = await api.post(`/admin/rejudge/${id}`)
     return r.data
