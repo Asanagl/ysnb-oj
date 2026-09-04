@@ -107,6 +107,19 @@ stdin，自动 restart + is-active）与 `m5-frontend-sync.mjs`（前端 dist �
 | 每季度 | 评估磁盘增长（testdata/备份）；考虑第二台判题机（见 judge-sandbox.md §四末） |
 | 人员变动 | 轮换 root SSH、admin、DB、JWT/daemon 密钥（改 oj.env → restart），更新交接文档 |
 
+### SSH 加固基线（2026-09-04 已执行，security-audit.md §13.4 挂账关闭）
+
+当前状态：root 仅 ed25519 密钥登录，`PasswordAuthentication no` +
+`PermitRootLogin prohibit-password`（+ `KbdInteractiveAuthentication no`），
+配置落点为 drop-in `/etc/ssh/sshd_config.d/00-oj-hardening.conf`（首匹配优先于
+主配置）。fail2ban 经评估未安装（密钥化后密码爆破面已消除；如需加装：
+`apt install fail2ban` 并启用 sshd jail 即可）。
+
+操作顺序红线（后续轮换/变更沿用）：先装新公钥并**用新终端实测密钥登录成功**，
+才允许改 sshd 配置；改完 `sshd -t` → `systemctl reload ssh`（不断开当前会话）→
+新开连接双向验证（密钥通 / 密码拒）。回滚：删除上述 drop-in 或恢复
+`/etc/ssh/sshd_config.bak-*` 后备份，`systemctl reload ssh`。
+
 ## 八、配置变更索引
 
 | 想改什么 | 改哪里 |

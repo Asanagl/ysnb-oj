@@ -336,10 +336,13 @@ banGate 中间件）、全页出题编辑器（ProblemEditorView/MyProblemEditor
 | nginx 加固配置 | 已推送（备份 oj.bak-sec），nginx -t 门禁 + reload 验证 |
 | 8080/9090 对外发布 | 已移除（compose expose + systemd 127.0.0.1 双确认） |
 
-### 13.4 待用户配合项（SSH 加固）
+### 13.4 SSH 加固（2026-09-04 已闭环）
 
-SSH 密钥登录 + 禁密码 + fail2ban 需要用户先在本机生成/登记公钥并在场
-验证新登录方式后才可执行（配错会锁死管理通道）；操作清单已写入
-`docs/maintenance.md` 第七节，待执行。
+root ed25519 公钥已安装并经用户在场实测密钥登录成功后才执行配置变更：
+`PasswordAuthentication no` + `PermitRootLogin prohibit-password`
+（+ `KbdInteractiveAuthentication no`），drop-in 落点
+`/etc/ssh/sshd_config.d/00-oj-hardening.conf`，`sshd -T` 实测生效，
+新开密钥连接正常、密码连接实测被拒。fail2ban 经评估未安装（密钥化后
+密码爆破面已消除）。操作顺序红线和回滚路径见 `docs/maintenance.md` 第七节。
 
 **门禁结论：通过**（P0/P1 全部落地并有外网验证；P2 记录在案）。
