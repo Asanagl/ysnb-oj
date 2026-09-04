@@ -7,7 +7,6 @@
 从校内 ACM 集训队的日常训练与比赛中长出来，开箱即用：ICPC / IOI 赛制、组队赛、
 封榜滚榜、SPJ / 交互题、多平台刷题数据聚合、公开 API 与 cph 桥接，一个不缺。
 
-<!-- 截图占位：从生产站点截取后放到 docs/screenshots/ 并替换下面的路径 -->
 ![首页（亮色主题）](docs/screenshots/home-light.png)
 ![比赛榜单（IOI 部分分 / 暗色主题）](docs/screenshots/contest-ioi-dark.png)
 
