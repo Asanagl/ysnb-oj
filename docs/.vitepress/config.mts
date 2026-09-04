@@ -7,6 +7,8 @@ export default defineConfig({
   description: '完全自研的在线评测系统——文档与运维手册',
   lang: 'zh-CN',
   cleanUrls: true,
+  // Pages 部署在仓库子路径下，没有 base 会全站丢样式
+  base: '/ysnb-oj/',
   // 仓库主页的 README 面向开源访客；本配置面向部署/运维/开发者
   themeConfig: {
     nav: [
