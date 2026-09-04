@@ -1,5 +1,6 @@
-// Push the hardened nginx.conf to /etc/nginx/sites-available/oj and reload.
-// Backs up first; nginx -t gates the swap; health check after reload.
+// Push the hardened nginx.conf to /etc/nginx/sites-available/oj and reload
+// (key auth). Backs up first; nginx -t gates the swap; header check after.
+// Replaces the password channel version (server SSH is key-only).
 import { Client } from 'ssh2'
 import fs from 'fs'
 import path from 'path'
@@ -7,11 +8,8 @@ import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const env = Object.fromEntries(
-  fs.readFileSync(path.join(here, '.sshenv'), 'utf8')
-    .split(/\r?\n/).filter((l) => l.includes('='))
-    .map((l) => [l.slice(0, l.indexOf('=')).trim(), l.slice(l.indexOf('=') + 1).trim()]),
-)
+const keyFile = process.env.OJ_SSH_KEY || 'C:/Users/Asanagi/.ssh/id_ed25519'
+const host = process.env.OJ_SSH_HOST || '103.210.238.125'
 
 const local = path.join(here, '..', 'deploy', 'nginx.conf')
 const b64 = fs.readFileSync(local).toString('base64')
@@ -21,10 +19,7 @@ const conn = new Client()
 await new Promise((resolve, reject) => {
   conn.on('ready', resolve)
   conn.on('error', reject)
-  conn.connect({
-    host: env.HOST, port: Number(env.PORT || 22),
-    username: env.USER || 'root', password: env.PASSWORD, readyTimeout: 20000,
-  })
+  conn.connect({ host, port: 22, username: 'root', privateKey: fs.readFileSync(keyFile), readyTimeout: 20000 })
 })
 
 const stream = await new Promise((resolve, reject) => {

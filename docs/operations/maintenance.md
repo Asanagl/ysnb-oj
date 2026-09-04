@@ -123,9 +123,8 @@ journalctl -u oj-judge -n 20 --no-pager                                   # 判�
   `node remote-test/m5-nginx-sync.mjs`（先备份为 `oj.bak-sec`，`nginx -t`
   门禁通过才替换并 reload）。
 
-> 注意：`m5-health.mjs` / `m5-nginx-sync.mjs` 读的是 `.sshenv` 密码通道，
-> SSH 密钥化后若连接失败，直接 SSH 上机执行等价命令（健康检查三条见上；
-> nginx 同步 = 备份现有配置 → `nginx -t` → 替换 → `systemctl reload nginx`）。
+以上脚本全部走 SSH 密钥通道（默认 `~/.ssh/id_ed25519`，可用 `OJ_SSH_KEY` /
+`OJ_SSH_HOST` 覆盖），2026-09-04 起服务器已关闭密码登录。
 
 ## 三、我要排查一个判题 SE
 
