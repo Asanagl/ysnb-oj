@@ -22,7 +22,8 @@
   `== all selftests passed ==`。
 - 注册：判题机以 `OJ_DAEMON_NAME`（默认 judge-1）+ `OJ_DAEMON_TOKEN`
   （= API 侧 `OJ_DAEMON_SECRET`）注册；API 落库 `JudgeDaemon` 表供监控页。
-- 并发：`OJ_MAX_PARALLEL` 控制同时在判的任务数（生产 = 2）。
+- 并发：`OJ_MAX_PARALLEL` 控制同时在判的任务数（生产 = 1——3.9GB 内存
+  预算下的实测安全值，论证见 §2.7 第 5 条）。
 
 ### 1.2 gRPC 协议（proto/oj.proto）
 
@@ -46,7 +47,7 @@ service JudgeRelay {
 
 判题失败（CE/SE）的工作区**故意保留**（日志会打印 `workspace kept at ...`）
 用于事后定位；成功运行的即用即删。保留区会慢慢积累，清理方法见
-`maintenance.md`。
+[运维 Runbook](../operations/maintenance.md)。
 
 ### 1.4 判题管线（pkg/judge）
 
@@ -60,7 +61,7 @@ service JudgeRelay {
    题目 judge_mode：default（diff，行尾/末空白容差）/ spj
    （`./checker <in> <ans> <out>`，exit 0=AC）/ interactive（双向管道）。
 5. **聚合**：多测试点取最坏（SKIPPED 不参与定级）；CE/RE 等状态语义见
-   `user-guide.md` 结果表。
+   [选手手册](../guide/user-guide.md)结果表。
 
 **交互题**：用户程序与 interactor 各自进沙箱，由父进程搭桥双向管道；
 任一方退出立即终止另一方；interactor 看门狗固定 30s，用户侧时限 =
@@ -161,6 +162,10 @@ CGO_ENABLED=0 GOOS=linux go test -c -o sandbox.test ./pkg/sandbox/
 ```
 
 ### 2.6 沙箱故障定位方法
+
+先用 `journalctl -u oj-api` 找 `submission judged` 锚点行定位到具体提交
+（每次判题完成打一条 INFO；SE 另有 ERROR 行）；免 SSH 时可用管理后台
+「日志查看器」页直接检索。再按现场深入：
 
 1. **看保留工作区**：CE/SE/**RE** 的 `/oj-work/judge-<id>` 里有源码、compile_err.txt、
    复现脚本。判题机日志 grep `workspace kept`。RE 保留现场是定位幻影

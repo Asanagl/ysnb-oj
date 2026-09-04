@@ -1,5 +1,7 @@
 # 云服务器实测报告（2026-08-29）
 
+> **存档说明**：本文档是 2026-09 上线阶段的历史快照，只读、不再更新。其中描述的工具链与配置（如密码 SSH、旧部署脚本）可能已被取代；现行口径以文档站首页（docs/index.md）导航的各分册为准。
+
 环境：Debian 11 · x86_64 · kernel 5.10.0-10 · cgroup v2 · 2C4G（用户提供 root）。
 方式：`remote-test/`（Node ssh2，stdin 流驱动，固定字面量 exec）+ `steps/*.sh` 阶段脚本。
 部署：`oj-api-linux`（dev/sqlite，:8080/:9090）+ `oj-judge-linux`（cloud-judge-1，/oj-work）。

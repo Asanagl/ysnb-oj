@@ -1,5 +1,7 @@
 # YSNB OJ — 测试与可用性报告（e2e-report）
 
+> **存档说明**：本文档是 2026-09 上线阶段的历史快照，只读、不再更新。其中描述的工具链与配置（如密码 SSH、旧部署脚本）可能已被取代；现行口径以文档站首页（docs/index.md）导航的各分册为准。
+
 > 测试执行环境: Windows 11 + Git Bash, Go 1.27.0, Node 24.16.0
 > 测试日期: 2026-08-28
 > 测试资产: `backend/pkg/judge/pipeline_test.go`(新增), `scripts/e2e-test.sh`(新增), `scripts/ws-probe.mjs`(新增), `scripts/zipmake.go`(新增, 构造测试用 zip)
@@ -178,7 +180,7 @@ BUG-001~006 已全部修复并回归：
 
 ## 九、用户出题/审核流 E2E（2026-08-30，云端复测）
 
-新增 `remote-test/user-problem-e2e.mjs`（直连生产 <your-server-ip>，覆盖本轮新增的
+新增 `remote-test/user-problem-e2e.mjs`（直连生产 `<your-server-ip>`，覆盖本轮新增的
 用户出题 + 审核流 + 题解区全链路），15 项断言：
 
 | # | 断言 | 结果 |

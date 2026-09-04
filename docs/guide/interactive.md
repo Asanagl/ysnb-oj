@@ -47,3 +47,8 @@ exit != 0     -> WA（stderr 第一行作为反馈信息展示给用户）
   整包忽略（交互题请用自有格式或导入后单独传）。
 - checker/interactor 支持在编辑器直接上传 `.cpp` 文件（内容进文本框，
   随表单保存）。
+
+## 与 IOI 赛制的关系
+
+IOI 分值表与 checker 正交——checker 仍只判 AC/WA，部分分由测试点分值
+（case-scores）计算。

@@ -82,12 +82,14 @@
   Codeforces/洛谷/AtCoder/牛客 适配器 + 题面爬虫，webhook 目标带 SSRF 校验
 - **维护 CLI（oj-cli）**：容器内/裸机直连数据库的应急自救工具——找回超管、
   重置密码、改角色、生成邀请码、健康诊断，`--token` 二次确认、无网络入口
+- **结构化日志**：API 与判题机统一 slog JSON（logx）→ stderr → journald
+  收口，管理后台「日志查看器」免 SSH 直接检索两服务日志
 - **一键部署 + 备份演练**：`deploy/one-click.sh` 一条命令起全套；
   每日全量备份（日备 14 天 + 月备 6 个月）+ 每月自动恢复演练
 
 ### 实测数字
 
-> 来自 `docs/e2e-report.md` 的云端实测，非实验室理想值（2C4G 单机、API+判题同机）。
+> 来自 `docs/archive/e2e-report.md` 的云端实测，非实验室理想值（2C4G 单机、API+判题同机）。
 
 | 项 | 结果 |
 |---|---|
@@ -119,7 +121,7 @@ bash deploy/one-click.sh
 地址与管理员密码（**立即记下**）。脚本幂等，重复执行安全。
 
 systemd 裸机部署路线（适合校内已有服务器、不想用 Docker）：
-见 **[docs/deploy.md](docs/deploy.md)** 方式 B（systemd 单元 + 环境变量 + nginx 配置齐备）。
+见 **[docs/operations/deploy.md](docs/operations/deploy.md)** 方式 B（systemd 单元 + 环境变量 + nginx 配置齐备）。
 
 ### 开发（后端仅 Linux；Windows/macOS 只跑前端工具链）
 
@@ -168,25 +170,26 @@ bash scripts/e2e-test.sh       # 一键 API E2E（自启自清，退出码非 0 
 任务（代码 + 限制 + 测试点 sha256 清单）→ 按 sha256 增量拉数据并缓存 → 编译
 （带缓存）→ 逐测试点沙箱运行 → 比对/特判/交互 → 回传落库 + WebSocket 广播。
 判题机断线时其在租约内的任务立即重回队列，后台扫描器兜底处理孤儿任务。
-更多细节见 [docs/architecture.md](docs/architecture.md)。
+更多细节见 [docs/development/architecture.md](docs/development/architecture.md)。
 
 ## 文档地图
 
+在线文档站：<https://asanagl.github.io/ysnb-oj/>（VitePress 自动生成）。
+
 | 文档 | 内容 |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | 架构总览、关键决策、判题数据流、沙箱安全模型 |
-| [docs/tech-stack.md](docs/tech-stack.md) | 技术选型与版本、OJ_* 环境变量速查、限流阈值 |
-| [docs/deploy.md](docs/deploy.md) | 部署（一键 / Docker Compose / systemd）、备份与恢复演练、故障排查 |
-| [docs/judge-sandbox.md](docs/judge-sandbox.md) | 判题机与沙箱深水区：判题管线、seccomp 白名单、已踩过的坑 |
-| [docs/interactive.md](docs/interactive.md) | SPJ / 交互题 checker / interactor 约定 |
-| [docs/api.md](docs/api.md) | 公开 API（/public/*）、cph 端点、插件与爬取接口 |
-| [docs/user-guide.md](docs/user-guide.md) | 选手手册：注册刷题、结果含义、题单、比赛、小组 |
-| [docs/admin-guide.md](docs/admin-guide.md) | 管理·出题人手册：角色矩阵、出题审核、比赛编排、判题机监控 |
-| [docs/maintenance.md](docs/maintenance.md) | 运维 runbook：巡检、发布升级、磁盘缓存、事故处置 |
-| [docs/security-audit.md](docs/security-audit.md) | 安全审计报告：沙箱逃逸面、每轮加固记录、残余风险 |
-| [docs/e2e-report.md](docs/e2e-report.md) | 测试与可用性报告：E2E 矩阵、压测、判题基准、bug 修复史 |
-| [docs/cloud-test-report.md](docs/cloud-test-report.md) | 云服务器实测报告：真机判题闭环与云上修复 |
-| [docs/handover.md](docs/handover.md) | 接手文档：30 分钟定位任何一块代码 |
+| [docs/guide/user-guide.md](docs/guide/user-guide.md) | 选手手册：注册刷题、结果含义、题单、比赛、小组 |
+| [docs/guide/admin-guide.md](docs/guide/admin-guide.md) | 管理·出题人手册：角色矩阵、出题审核、比赛编排、判题机监控 |
+| [docs/guide/interactive.md](docs/guide/interactive.md) | SPJ / 交互题 checker / interactor 约定 |
+| [docs/operations/deploy.md](docs/operations/deploy.md) | 部署（一键 / Docker Compose / systemd）、备份与恢复演练、故障排查 |
+| [docs/operations/maintenance.md](docs/operations/maintenance.md) | 运维 runbook：巡检、发布升级、磁盘缓存、事故处置 |
+| [docs/development/architecture.md](docs/development/architecture.md) | 架构总览、关键决策、判题数据流、沙箱安全模型 |
+| [docs/development/tech-stack.md](docs/development/tech-stack.md) | 技术选型与版本、OJ_* 环境变量速查、限流阈值 |
+| [docs/development/judge-sandbox.md](docs/development/judge-sandbox.md) | 判题机与沙箱深水区：判题管线、seccomp 白名单、已踩过的坑 |
+| [docs/development/showcase.md](docs/development/showcase.md) | 技术总结：选型权衡、核心难点复盘、量化成果 |
+| [docs/development/handover.md](docs/development/handover.md) | 接手文档：30 分钟定位任何一块代码 |
+| [docs/reference/api.md](docs/reference/api.md) | 公开 API（/public/*）、cph 端点、插件与爬取接口 |
+| [docs/archive/](docs/archive/) | 历史快照（只读存档）：安全审计、上线清单、E2E 报告、云实测报告 |
 
 仓库结构：`backend/`（cmd/api、cmd/judge、cmd/cli、pkg/sandbox、pkg/judge、internal/*）
 · `frontend/`（Vue3 SPA）· `deploy/`（nginx、systemd、one-click.sh、备份脚本）
@@ -212,12 +215,12 @@ bash scripts/e2e-test.sh       # 一键 API E2E（自启自清，退出码非 0 
 - **公平性红线**：完整判题测试数据（.in/.out 全集）永不通过公开 API 暴露
 
 完整审计过程、沙箱逃逸面专项与接受的残余风险见
-**[docs/security-audit.md](docs/security-audit.md)**。
+**[docs/archive/security-audit.md](docs/archive/security-audit.md)**。
 
 ## API
 
 面向机器人、数据看板、CLI/IDE 工具的只读公开 API：
-**[docs/api.md](docs/api.md)**。
+**[docs/reference/api.md](docs/reference/api.md)**。
 
 亮点：`GET /api/v1/public/problems/:id/cph` 直接返回 cph（VSCode Competitive
 Programming Helper）可导入的题目 JSON——配合本地 Competitive Companion 回推，
@@ -226,10 +229,8 @@ Programming Helper）可导入的题目 JSON——配合本地 Competitive Compa
 
 ## 贡献
 
-欢迎 Issue 与 PR，贡献流程与规范见 **[CONTRIBUTING.md](CONTRIBUTING.md)**
-（即将补充）。
+欢迎 Issue 与 PR，贡献流程与规范见 **[CONTRIBUTING.md](CONTRIBUTING.md)**。
 
 ## License
 
-本项目以 **MIT** 协议开源。`LICENSE` 文件随首个正式发布一起提交；
-在此之前，仓库内代码默认按 MIT 授权使用。
+本项目以 **MIT** 协议开源，见 [LICENSE](LICENSE)。
