@@ -281,6 +281,8 @@ func (s *Server) wsTopicAuthorizer() wsq.TopicAuthorizer {
 }
 
 // wsAuth validates the query-string JWT before the connection upgrades.
+// Sets the same context keys as the auth middleware (role + id included) —
+// the WS topic authorizer needs the full identity, not just claims.
 func (s *Server) wsAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims, err := s.JWT.Parse(c.Query("token"))
@@ -289,6 +291,8 @@ func (s *Server) wsAuth() gin.HandlerFunc {
 			return
 		}
 		c.Set(auth.ClaimsKey, claims)
+		c.Set(auth.RoleKey, claims.Role)
+		c.Set(auth.IDKey, claims.UserID)
 		c.Next()
 	}
 }
