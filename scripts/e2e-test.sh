@@ -102,7 +102,8 @@ echo "=== 2. admin login ==="
 CODE=$(postj "$API/auth/login" "{\"username\":\"$ADMIN_USER\",\"password\":\"$ADMIN_PASS\"}")
 check "admin login is 200" 200 "$CODE"
 ADMIN_TOKEN=$(jget token)
-jcheck "admin role is admin" 'd.user.role==="admin"'
+# bootstrap admin is THE one super_admin with uid 0 (root convention, 2026-09-05)
+jcheck "admin role is super_admin" 'd.user.role==="super_admin"'
 status "admin login wrong password is 401" 401 -X POST -H "Content-Type: application/json" \
   -d "{\"username\":\"$ADMIN_USER\",\"password\":\"wrong-pass\"}" "$API/auth/login"
 status "GET /auth/me with admin token is 200" 200 -H "Authorization: Bearer $ADMIN_TOKEN" "$API/auth/me"
