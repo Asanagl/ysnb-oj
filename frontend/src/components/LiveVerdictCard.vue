@@ -1,9 +1,12 @@
 <script setup lang="ts">
 // 实时判定卡片（Hydro 风格）：判中时测试点圆点条逐个点亮 + n/m 进度；
-// 终态显示完整判定名大字 + 耗时/内存/得分 chip + 编译信息。
+// 终态显示完整判定名大字 + 耗时/内存/得分统计块 + 编译信息。
 // 完整判定名是用户要求的口径，仅用于本卡片；全站 StatusTag 短码不动。
 import { computed } from 'vue'
-import { Loader2 } from 'lucide-vue-next'
+import {
+  AlertTriangle, CheckCircle2, Clock, Database, FileWarning,
+  Loader2, ServerCrash, SkipForward, XCircle,
+} from 'lucide-vue-next'
 import type { Submission } from '../api/client'
 import type { CaseDot } from '../composables/useLiveSubmission'
 import { Card, CardContent } from '@/components/ui/card'
@@ -49,12 +52,28 @@ const TONE: Record<string, string> = {
   SE: 'text-wa',
   SKIPPED: 'text-muted-foreground',
 }
+const ICON: Record<string, unknown> = {
+  AC: CheckCircle2, WA: XCircle, TLE: Clock, MLE: Database,
+  RE: AlertTriangle, CE: FileWarning, SE: ServerCrash, SKIPPED: SkipForward,
+}
+const ICON_BG: Record<string, string> = {
+  AC: 'bg-ac-bg text-ac',
+  WA: 'bg-wa-bg text-wa',
+  TLE: 'bg-tle-bg text-tle',
+  MLE: 'bg-tle-bg text-tle',
+  RE: 'bg-wa-bg text-wa',
+  CE: 'bg-pending-bg text-pending',
+  SE: 'bg-wa-bg text-wa',
+  SKIPPED: 'bg-muted text-muted-foreground',
+}
 
 const isActive = computed(() =>
   ['PENDING', 'COMPILING', 'JUDGING'].includes(props.submission.status),
 )
 const fullName = computed(() => FULL_NAME[props.submission.status] ?? props.submission.status)
 const tone = computed(() => TONE[props.submission.status] ?? 'text-foreground')
+const icon = computed(() => ICON[props.submission.status] ?? CheckCircle2)
+const iconBg = computed(() => ICON_BG[props.submission.status] ?? 'bg-muted text-foreground')
 
 // 终态用 snap.cases 全量；判中用 WS 逐 case 推送
 const dots = computed<CaseDot[]>(() => {
@@ -81,7 +100,7 @@ const dotTitle = (i: number) => {
   return s ? `#${i} ${s}` : `#${i} 待评测`
 }
 const progressText = computed(() =>
-  isActive.value && total.value > 0 ? ` ${doneCount.value}/${total.value}` : '',
+  isActive.value && total.value > 0 ? `${doneCount.value}/${total.value}` : '',
 )
 const showMetrics = computed(
   () =>
@@ -93,19 +112,23 @@ const showMetrics = computed(
 <template>
   <Card>
     <CardContent class="space-y-3 p-5">
-      <div class="flex items-center gap-3">
-        <span class="text-sm text-muted-foreground">最近提交</span>
-        <span class="font-mono text-sm">#{{ submission.id }}</span>
+      <div class="flex items-center gap-2 text-sm text-muted-foreground">
+        最近提交 <span class="font-mono">#{{ submission.id }}</span>
       </div>
 
-      <!-- 状态横条：判中 spinner + n/m；终态完整判定名大字 -->
+      <!-- 状态横条：判中 spinner + n/m；终态 = 色块图标 + 完整判定名 -->
       <div class="flex items-center gap-3">
         <template v-if="isActive">
-          <Loader2 class="size-6 animate-spin text-primary" />
-          <span class="text-xl font-bold text-primary">{{ fullName }}</span>
+          <span class="flex size-11 items-center justify-center rounded-xl bg-primary/10">
+            <Loader2 class="size-6 animate-spin text-primary" />
+          </span>
+          <span class="text-2xl font-bold text-primary">{{ fullName }}</span>
           <span v-if="progressText" class="font-mono text-lg text-muted-foreground">{{ progressText }}</span>
         </template>
         <template v-else>
+          <span class="flex size-12 items-center justify-center rounded-xl" :class="iconBg">
+            <component :is="icon" class="size-7" />
+          </span>
           <span class="text-3xl font-black tracking-tight" :class="tone">{{ fullName }}</span>
         </template>
       </div>
@@ -115,7 +138,7 @@ const showMetrics = computed(
         <span
           v-for="i in total"
           :key="i"
-          class="inline-flex h-7 min-w-7 items-center justify-center rounded-md px-1 font-mono text-xs font-semibold transition-colors"
+          class="inline-flex h-8 min-w-8 items-center justify-center rounded-md px-1 font-mono text-xs font-bold transition-colors"
           :class="dotClass(i)"
           :title="dotTitle(i)"
         >
@@ -123,20 +146,28 @@ const showMetrics = computed(
         </span>
       </div>
 
-      <!-- 终态指标 chip -->
-      <div v-if="showMetrics" class="flex flex-wrap gap-2">
-        <span class="rounded-full bg-muted px-3 py-0.5 text-xs text-muted-foreground">
-          耗时 <span class="font-mono text-foreground">{{ submission.time_ms }}</span> ms
-        </span>
-        <span class="rounded-full bg-muted px-3 py-0.5 text-xs text-muted-foreground">
-          内存 <span class="font-mono text-foreground">{{ submission.memory_kb }}</span> KB
-        </span>
-        <span
-          v-if="submission.score !== undefined && submission.score > 0"
-          class="rounded-full bg-ac-bg px-3 py-0.5 text-xs text-ac"
-        >
-          得分 <span class="font-mono font-semibold">{{ submission.score }}</span>
-        </span>
+      <!-- 终态统计块：大号等宽数字，一眼可读 -->
+      <div v-if="showMetrics" class="flex items-center gap-5 rounded-lg bg-muted/60 px-4 py-2.5">
+        <div>
+          <div class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">耗时</div>
+          <div class="font-mono text-xl font-bold tabular-nums text-foreground">
+            {{ submission.time_ms }}<span class="ml-0.5 text-xs font-normal text-muted-foreground">ms</span>
+          </div>
+        </div>
+        <div class="h-9 w-px bg-border" />
+        <div>
+          <div class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">内存</div>
+          <div class="font-mono text-xl font-bold tabular-nums text-foreground">
+            {{ submission.memory_kb }}<span class="ml-0.5 text-xs font-normal text-muted-foreground">KB</span>
+          </div>
+        </div>
+        <template v-if="submission.score !== undefined && submission.score > 0">
+          <div class="h-9 w-px bg-border" />
+          <div>
+            <div class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">得分</div>
+            <div class="font-mono text-xl font-bold tabular-nums text-ac">{{ submission.score }}</div>
+          </div>
+        </template>
       </div>
 
       <p
