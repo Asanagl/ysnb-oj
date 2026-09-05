@@ -43,6 +43,11 @@ type Task struct {
 	// StopOnFail stops at the first non-AC case and reports the rest as
 	// SKIPPED (contest submissions; training keeps full feedback).
 	StopOnFail bool `json:"stop_on_fail,omitempty"`
+	// OnCase, when set, fires once per case the moment its result is known
+	// (including SKIPPED cases on the stop-on-fail path). The daemon uses it
+	// to stream Hydro-style per-case progress to the SPA. Implementations
+	// must be thread-safe: parallel case workers call it concurrently.
+	OnCase func(CaseResult) `json:"-"`
 }
 
 type CaseResult struct {

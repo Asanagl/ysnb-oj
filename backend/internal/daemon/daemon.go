@@ -148,6 +148,21 @@ func (d *Daemon) runTask(ctx context.Context, stream pb.JudgeRelay_ConnectClient
 
 	start := time.Now()
 	t := fromPbTask(task)
+	// Hydro-style live dots: stream each case result the moment it is known.
+	// Best-effort — a failed progress send must never affect the judging or
+	// the final TaskResult; send() serializes concurrent workers on the
+	// shared gRPC stream.
+	t.OnCase = func(cr judge.CaseResult) {
+		_ = d.send(stream, &pb.DaemonMessage{Body: &pb.DaemonMessage_CaseProgress{CaseProgress: &pb.CaseProgress{
+			SubmissionId: task.SubmissionId,
+			Index:        int32(cr.Index),
+			Status:       cr.Status,
+			TimeMs:       cr.TimeMS,
+			MemoryKb:     cr.MemKB,
+			Score:        int64(cr.Score),
+			Total:        int32(len(task.Cases)),
+		}}})
+	}
 	result := d.Service.Run(ctx, t)
 	// INFO summary per submission on the judge side; DEBUG adds the full
 	// per-case breakdown (compile stderr tail, per-case time/mem/signal).

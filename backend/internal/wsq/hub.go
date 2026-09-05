@@ -29,6 +29,7 @@ type message struct {
 type client struct {
 	conn   *websocket.Conn
 	role   string
+	userID uint
 	topics map[string]struct{}
 	mu     sync.Mutex
 }
@@ -53,12 +54,14 @@ func NewHub() *Hub {
 	}
 }
 
-// TopicAuthorizer decides whether a connection's role may subscribe to a
-// topic; infrastructure topics (admin:*) must not leak to ordinary users.
-type TopicAuthorizer func(role, topic string) bool
+// TopicAuthorizer decides whether a connection may subscribe to a topic;
+// infrastructure topics (admin:*) must not leak to ordinary users and
+// per-submission topics are owner-only. The userID comes from the
+// authenticated claims captured at upgrade time (0 = anonymous).
+type TopicAuthorizer func(role string, userID uint, topic string) bool
 
 // Handler returns the gin handler upgrading GET /api/v1/ws. The authorizer
-// is captured per connection together with the authenticated role.
+// is captured per connection together with the authenticated identity.
 func (h *Hub) Handler(authorize TopicAuthorizer) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if h.size() >= maxClients {
@@ -71,7 +74,9 @@ func (h *Hub) Handler(authorize TopicAuthorizer) gin.HandlerFunc {
 		}
 		role, _ := c.Get("auth.role")
 		roleStr, _ := role.(string)
-		cl := &client{conn: conn, role: roleStr, topics: map[string]struct{}{}}
+		id, _ := c.Get("auth.id")
+		idNum, _ := id.(uint)
+		cl := &client{conn: conn, role: roleStr, userID: idNum, topics: map[string]struct{}{}}
 		h.mu.Lock()
 		h.clients[cl] = struct{}{}
 		h.mu.Unlock()
@@ -103,7 +108,7 @@ func (h *Hub) readLoop(cl *client, authorize TopicAuthorizer) {
 			return
 		}
 		cl.mu.Lock()
-		if req.Subscribe != "" && authorize(cl.role, req.Subscribe) {
+		if req.Subscribe != "" && authorize(cl.role, cl.userID, req.Subscribe) {
 			cl.topics[req.Subscribe] = struct{}{}
 		}
 		if req.Unsubscribe != "" {

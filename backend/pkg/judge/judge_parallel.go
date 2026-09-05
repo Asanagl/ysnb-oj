@@ -53,10 +53,18 @@ func (s *Service) judgeCases(ctx context.Context, res *Result, ws string, lang *
 			default:
 			}
 			if task.StopOnFail && caseFailed(res) {
-				res.Cases = append(res.Cases, CaseResult{Index: cr.Index, Status: "SKIPPED"})
+				skipped := CaseResult{Index: cr.Index, Status: "SKIPPED"}
+				res.Cases = append(res.Cases, skipped)
+				if task.OnCase != nil {
+					task.OnCase(skipped)
+				}
 				continue
 			}
-			res.Cases = append(res.Cases, s.judgeOneCase(ctx, ws, lang, task, cr, checkerPath, interactorPath))
+			out := s.judgeOneCase(ctx, ws, lang, task, cr, checkerPath, interactorPath)
+			res.Cases = append(res.Cases, out)
+			if task.OnCase != nil {
+				task.OnCase(out)
+			}
 		}
 		return
 	}
@@ -86,6 +94,9 @@ func (s *Service) judgeCases(ctx context.Context, res *Result, ws string, lang *
 				cws := filepath.Join(ws, "cases", fmt.Sprint(cr.Index))
 				out := s.judgeOneCase(cancelCtx, cws, lang, task, cr, checkerPath, interactorPath)
 				results[i] = out
+				if task.OnCase != nil {
+					task.OnCase(out)
+				}
 				if out.Status == "SE" {
 					// infrastructure fault: cancel sibling workers; the
 					// whole submission is already doomed to SE.
