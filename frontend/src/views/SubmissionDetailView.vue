@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { Submissions } from '../api/client'
+import { isFinalStatus, useLiveSubmission } from '../composables/useLiveSubmission'
 import StatusTag from '../components/StatusTag.vue'
 import { Alert } from '@/components/ui/alert'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,12 +16,16 @@ import {
 } from '@/components/ui/table'
 
 const route = useRoute()
-const sub = ref<Awaited<ReturnType<typeof Submissions.get>> | null>(null)
+// 整页绑定实时快照：加载时非终态则订阅 WS（断线降级轮询），终态事件到达后
+// refresh 重拉全量（逐 case 明细 / IOI 得分列 / compile_message 随之更新）
+const { snap: sub, set: setSub, track: trackSub, refresh: refreshSub } = useLiveSubmission()
 // IOI problems: per-case partial scores ride on CaseResult.score
 const hasCaseScore = computed(() => sub.value?.cases.some((c) => c.score !== undefined) ?? false)
 
 onMounted(async () => {
-  sub.value = await Submissions.get(route.params.id as string)
+  const s = await Submissions.get(route.params.id as string)
+  setSub(s)
+  if (!isFinalStatus(s.status)) trackSub(s.id, () => void refreshSub())
 })
 </script>
 

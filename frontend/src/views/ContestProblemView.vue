@@ -7,11 +7,11 @@ import {
   Submissions,
   errMsg,
   type Sample,
-  type Submission,
 } from '../api/client'
+import { useLiveSubmission } from '../composables/useLiveSubmission'
 import { renderStatement } from '../utils/markdown'
 import CodeEditor from '../components/CodeEditor.vue'
-import StatusTag from '../components/StatusTag.vue'
+import LiveVerdictCard from '../components/LiveVerdictCard.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -23,14 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { toast } from '@/lib/toast'
 
 const route = useRoute()
@@ -42,7 +34,8 @@ const languages = ref<{ id: string; name: string }[]>([])
 const lang = ref('cpp')
 const code = ref('')
 const submitting = ref(false)
-const lastSub = ref<Submission | null>(null)
+// 实时判定卡片：比赛题与补题模式通用；WS 推送 + 断线轮询兜底
+const { snap: liveSnap, set: liveSet, track: liveTrack, refresh: liveRefresh } = useLiveSubmission()
 
 const statementHTML = computed(() =>
   problem.value ? renderStatement(problem.value.problem.statement_md) : '',
@@ -90,26 +83,13 @@ async function submit() {
       code: code.value,
       contest_id: cid,
     })
-    lastSub.value = sub
+    liveSet(sub)
+    liveTrack(sub.id, () => void liveRefresh())
     toast.success(practice.value ? '补题已提交' : '已提交，等待判题')
-    pollSubmission(sub.id)
   } catch (e) {
     toast.error(errMsg(e))
   } finally {
     submitting.value = false
-  }
-}
-
-async function pollSubmission(id: number) {
-  for (let i = 0; i < 120; i++) {
-    await new Promise((r) => setTimeout(r, 1000))
-    try {
-      const s = await Submissions.get(id)
-      lastSub.value = s
-      if (!['PENDING', 'COMPILING', 'JUDGING'].includes(s.status)) return
-    } catch {
-      return
-    }
   }
 }
 </script>
@@ -167,37 +147,7 @@ async function pollSubmission(id: number) {
         </CardContent>
       </Card>
 
-      <Card v-if="lastSub">
-        <CardContent class="p-6">
-          <h4 class="mb-2 flex items-center gap-2 font-semibold">
-            最近提交 #{{ lastSub.id }}
-            <StatusTag :status="lastSub.status" />
-          </h4>
-          <p v-if="lastSub.compile_message" class="whitespace-pre-wrap text-muted-foreground">
-            {{ lastSub.compile_message }}
-          </p>
-          <Table v-if="lastSub.cases.length">
-            <TableHeader>
-              <TableRow>
-                <TableHead class="w-[60px]">#</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead class="w-[90px]">耗时</TableHead>
-                <TableHead class="w-[90px]">内存</TableHead>
-                <TableHead>信息</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow v-for="c in lastSub.cases" :key="c.index">
-                <TableCell>{{ c.index }}</TableCell>
-                <TableCell><StatusTag :status="c.status" /></TableCell>
-                <TableCell>{{ c.time_ms }}</TableCell>
-                <TableCell>{{ c.mem_kb }}</TableCell>
-                <TableCell>{{ c.message }}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <LiveVerdictCard v-if="liveSnap" :submission="liveSnap" />
     </div>
   </div>
 </template>

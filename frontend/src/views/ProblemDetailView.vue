@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Problems,
   Solutions,
   Submissions,
-  connectWS,
   errMsg,
   type ProblemSolution,
 } from '../api/client'
+import { useLiveSubmission } from '../composables/useLiveSubmission'
 import { useAuthStore } from '../stores/auth'
 import { renderStatement } from '../utils/markdown'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import CodeEditor from '../components/CodeEditor.vue'
-import StatusTag from '../components/StatusTag.vue'
+import LiveVerdictCard from '../components/LiveVerdictCard.vue'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -34,14 +34,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { Empty } from '@/components/ui/empty'
 
 const route = useRoute()
@@ -52,8 +44,8 @@ const languages = ref<{ id: string; name: string }[]>([])
 const lang = ref('cpp')
 const code = ref('')
 const submitting = ref(false)
-const lastSub = ref<{ id: number; status: string; cases: { index: number; status: string; time_ms: number; mem_kb: number; message?: string }[]; compile_message?: string } | null>(null)
-let ws: ReturnType<typeof connectWS> | null = null
+// 实时判定卡片：WS 推送驱动，断线自动降级轮询（useLiveSubmission）
+const { snap: liveSnap, set: liveSet, track: liveTrack, refresh: liveRefresh } = useLiveSubmission()
 
 const statementHTML = computed(() =>
   problem.value ? renderStatement(problem.value.problem.statement_md) : '',
@@ -87,9 +79,7 @@ onMounted(async () => {
     headers: { Authorization: `Bearer ${localStorage.getItem('oj_token')}` },
   })
   languages.value = (await r.json()) as { id: string; name: string }[]
-  ws = connectWS([], () => {})
 })
-onBeforeUnmount(() => ws?.close())
 
 function openCreate(parent?: ProblemSolution) {
   replyTo.value = parent ?? null
@@ -160,26 +150,13 @@ async function submit() {
       language: lang.value,
       code: code.value,
     })
-    lastSub.value = sub
+    liveSet(sub)
+    liveTrack(sub.id, () => void liveRefresh())
     toast.success('已提交，等待判题')
-    pollSubmission(sub.id)
   } catch (e) {
     toast.error(errMsg(e))
   } finally {
     submitting.value = false
-  }
-}
-
-async function pollSubmission(id: number) {
-  for (let i = 0; i < 120; i++) {
-    await new Promise((r) => setTimeout(r, 1000))
-    try {
-      const s = await Submissions.get(id)
-      lastSub.value = s
-      if (!['PENDING', 'COMPILING', 'JUDGING'].includes(s.status)) return
-    } catch {
-      return
-    }
   }
 }
 
@@ -228,35 +205,7 @@ const canEditSolution = (sol: ProblemSolution) =>
             {{ submitting ? '提交中…' : '提交' }}
           </Button>
         </Card>
-        <Card v-if="lastSub" class="mt-3 p-5">
-          <h4 class="mb-2 flex items-center gap-2 text-base font-semibold">
-            最近提交 #{{ lastSub.id }}
-            <StatusTag :status="lastSub.status" />
-          </h4>
-          <p v-if="lastSub.compile_message" class="whitespace-pre-wrap text-muted-foreground">
-            {{ lastSub.compile_message }}
-          </p>
-          <Table v-if="lastSub.cases.length">
-            <TableHeader>
-              <TableRow>
-                <TableHead class="w-[60px]">#</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead class="w-[90px]">耗时</TableHead>
-                <TableHead class="w-[90px]">内存</TableHead>
-                <TableHead>信息</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow v-for="c in lastSub.cases" :key="c.index">
-                <TableCell>{{ c.index }}</TableCell>
-                <TableCell><StatusTag :status="c.status" /></TableCell>
-                <TableCell>{{ c.time_ms }}</TableCell>
-                <TableCell>{{ c.mem_kb }}</TableCell>
-                <TableCell>{{ c.message }}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </Card>
+        <LiveVerdictCard v-if="liveSnap" :submission="liveSnap" class="mt-3" />
       </div>
     </div>
 
