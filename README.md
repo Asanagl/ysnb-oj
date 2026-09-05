@@ -116,9 +116,10 @@ bash deploy/one-click.sh
 ```
 
 脚本自动完成：前置检查 → 现场用 openssl 随机生成 `.env`（全部密钥 + admin 初始
-密码，已有 `.env` 不覆盖）→ `docker compose up -d --build` → 等待 API 就绪 →
-判题机沙箱自检 `--selftest` → 安装备份/演练 cron → 前端冒烟。结束时打印访问
-地址与管理员密码。脚本幂等，重复执行安全。
+密码，已有 `.env` 不覆盖）→ `docker compose up -d --build`（postgres/redis/api/web
+四件容器化）→ 等待 API 就绪 → 判题机自检（已装则跑 `--selftest`，未装打印三步
+安装指引——判题机跑宿主机，不进容器）→ 安装备份/演练 cron → 前端冒烟。结束时
+打印访问地址与管理员密码。脚本幂等，重复执行安全。
 
 systemd 裸机部署路线（适合校内已有服务器、不想用 Docker）：
 见 **[docs/operations/deploy.md](docs/operations/deploy.md)** 方式 B（systemd 单元 + 环境变量 + nginx 配置齐备）。

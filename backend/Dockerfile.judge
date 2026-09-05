@@ -1,6 +1,13 @@
 # Judge daemon image: the sandbox needs real Linux (cgroup v2, namespaces)
 # and the language toolchains users submit against. Run privileged — the
 # sandbox itself is the security boundary; see docs/architecture.md §安全模型.
+#
+# NOTE: docker-compose.yml no longer includes a judge service (the judge
+# runs bare-metal on the host via systemd — see docs/operations/deploy.md).
+# This image stays for operators who deliberately want a containerized
+# judge on a dedicated remote machine: docker build -f Dockerfile.judge .
+#   required: privileged + pid:host + cgroup base NOT shared with the host
+#   judge (different OJ_CGROUP_BASE), OJ_API_ENDPOINT/OJ_FETCH_BASE set.
 FROM golang:1.27-alpine AS build
 WORKDIR /src
 ENV GOPROXY=https://goproxy.cn,direct CGO_ENABLED=0

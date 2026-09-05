@@ -56,9 +56,25 @@ done
 [ "$code" = "200" ] || { echo "API not ready — logs: docker compose logs api"; exit 1; }
 echo "API OK"
 
-echo "== 4. judge selftest ="
-docker compose exec -T judge oj-judge --selftest || {
-  echo "selftest failed — logs: docker compose logs judge"; exit 1; }
+echo "== 4. judge ="
+# 判题机不进容器（沙箱要直采宿主机 cgroup v2）。已装则自验；未装则给出安装指引。
+if [ -x /opt/oj/oj-judge ]; then
+  /opt/oj/oj-judge --selftest || {
+    echo "selftest failed — check cgroup v2 and toolchain (docs/operations/deploy.md 第三节)"; exit 1; }
+  if [ -f /etc/systemd/system/oj-judge.service ]; then
+    systemctl enable --now oj-judge && echo "oj-judge service enabled"
+  else
+    echo "oj-judge binary OK; unit file missing — install deploy/systemd/oj-judge.service"
+  fi
+else
+  echo "oj-judge not installed on this host (expected: judge runs bare-metal, not in compose)."
+  echo "  1) copy dist/oj-judge-linux -> /opt/oj/oj-judge && chmod +x"
+  echo "  2) /opt/oj/oj-judge.env: OJ_API_ENDPOINT=127.0.0.1:9090 OJ_FETCH_BASE=http://127.0.0.1:8080"
+  echo "     OJ_DAEMON_TOKEN=<.env 的 OJ_DAEMON_SECRET> OJ_MAX_PARALLEL=1 OJ_WORK_ROOT=/oj-work"
+  echo "  3) /opt/oj/oj-judge --selftest 通过后: cp deploy/systemd/oj-judge.service /etc/systemd/system/"
+  echo "     systemctl daemon-reload && systemctl enable --now oj-judge"
+  echo "（不装判题机也可继续：Web/API/题库已可用，仅提交会停在 PENDING）"
+fi
 
 echo "== 5. backup cron ="
 mkdir -p /opt/oj/backup
@@ -80,6 +96,7 @@ echo "admin user: $(grep '^OJ_ADMIN_USERNAME=' .env | cut -d= -f2)"
 echo "admin pass: $(grep '^OJ_ADMIN_PASSWORD=' .env | cut -d= -f2)   <- record it now"
 echo "first invite code: log into admin console -> 用户管理 -> 邀请码 -> 生成"
 echo
+echo "services: postgres/redis/api in compose + web(nginx, host network); judge runs on the HOST (systemd)."
 echo "maintenance CLI (create/recover super admin, doctor…):"
 echo "  docker compose exec api oj-cli --token \$(grep '^OJ_CLI_TOKEN=' .env | cut -d= -f2) <子命令>"
 echo "  子命令: create-superadmin / reset-password / set-role / users / invite / doctor"

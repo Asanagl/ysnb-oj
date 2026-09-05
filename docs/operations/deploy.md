@@ -9,8 +9,10 @@
 - **操作系统**：后端 Linux-only（沙箱依赖 cgroup v2 与 namespaces），Windows / macOS 不受支持。建议 Ubuntu 22.04+ / Debian 12+；生产实测 Debian 11 也在稳定运行（seccomp KILL_PROCESS 需内核 ≥ 4.14，更老的内核会自动降级）。
 - **cgroup v2**（判题硬依赖），先验证：`stat -fc %T /sys/fs/cgroup` 必须输出 `cgroup2fs`。
 - **前端产物在开发机构建**，随仓库同步到服务器；**服务器上禁止 npm / go 构建**（小内存机会 OOM）：`cd frontend && npm ci && npm run build`。
-- **端口红线**：8080（API HTTP）与 9090（API gRPC）只允许 127.0.0.1（或 compose 内网）可达，公网只暴露 nginx 的 80（及将来可选的 443）。Compose 路线用 `expose` 不发布端口；裸机路线用防火墙兜底。
+- **端口红线**：8080（API HTTP）与 9090（API gRPC）只允许 127.0.0.1（或 compose 内网）可达，公网只暴露 nginx 的 80（及将来可选的 443）。Compose 路线把 api 端口回环发布到 `127.0.0.1:8080/9090`（宿主判题机与探活消费）；裸机路线用防火墙兜底。
 - 路径选择：**A. Docker Compose 一键**（大多数场景，`deploy/one-click.sh`）或 **B. 裸机 + systemd**（不想装 Docker 的校内服务器）。
+
+> **拓扑说明（两条路线一致）**：postgres/redis/api 由 compose 容器化，**判题机跑在宿主机**（沙箱要直采 cgroup v2，容器套一层无隔离收益），web(nginx) 用 host 网络与裸机共用同一份 `deploy/nginx.conf`——所以 `proxy_pass 127.0.0.1:8080` 在两种路线下都指向 api 的回环发布端口，不存在双配置漂移。
 
 ## 二、任务：我要在一台新服务器上从零部署
 
@@ -26,23 +28,29 @@ bash deploy/one-click.sh
 
 1. 前置检查（docker / `frontend/dist` / cgroup v2）；
 2. 生成 `.env`：PG 密码、JWT 密钥、判题机共享密钥（DAEMON）、admin 初始密码、CLI 令牌全部用 openssl 现场随机生成；**已存在的 `.env` 不覆盖**；
-3. `docker compose up -d --build`，轮询 `/api/v1/languages` 等待 API 就绪；
-4. 判题机自验 `docker compose exec -T judge oj-judge --selftest`；
+3. `docker compose up -d --build`（起 postgres/redis/api/web 四件），轮询 `/api/v1/languages` 等待 API 就绪；
+4. 判题机：已装则跑 `--selftest` 并拉起 systemd 单元；未装则打印三步安装指引（见下方判题机小节）——不装判题机也不阻塞，Web/题库已可用，提交会停在 PENDING；
 5. 安装备份 cron（每日 03:00 备份 + 每月 1 号 04:00 恢复演练，见第五节）；
 6. 前端冒烟，最后打印访问地址、admin 初始密码（**立即记下**）、邀请码入口与 oj-cli 用法。
 
 验证：
 
 ```bash
-docker compose ps    # postgres / redis / api / judge / web 全部 running
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1/api/v1/languages   # 期望 200（经 nginx 反代）
+docker compose ps    # postgres / redis / api / web 全部 running（web 显示 host 网络）
+docker compose exec api wget -qO- http://127.0.0.1:8080/api/v1/languages   # 语言 JSON（容器内自检）
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1/api/v1/languages # 期望 200（经 nginx 反代）
 ```
 
 浏览器打开 `http://<服务器IP>/`，用 `.env` 里的 `OJ_ADMIN_USERNAME` / `OJ_ADMIN_PASSWORD` 登录（仅首次启动、库中无用户时创建）。
 
-> **若 `/api/v1/languages` 返回 502**：compose 网络里 web 容器的 `127.0.0.1` 指向容器自身。把 `deploy/nginx.conf` 两处 `proxy_pass http://127.0.0.1:8080;` 改为 `http://api:8080;`（按服务名寻址），然后 `docker compose restart web`。
+**判题机（宿主机 systemd）安装**——compose 起完后接第三节"接入一台判题机"，同机部署时配置为：
 
-不用一键脚本、手动 compose：`cp .env.example .env` → 填掉所有 `change-me*`（`openssl rand -base64 32` 生成随机串）→ `docker compose up -d --build`；再手动补 selftest（命令同上第 4 步）与备份 cron（第五节）。
+```ini
+OJ_API_ENDPOINT=127.0.0.1:9090
+OJ_FETCH_BASE=http://127.0.0.1:8080
+```
+
+不用一键脚本、手动 compose：`cp .env.example .env` → 填掉所有 `change-me*`（`openssl rand -base64 32` 生成随机串）→ `docker compose up -d --build`；再手动补判题机安装（上方小节）与备份 cron（第五节）。
 
 ### 路径 B：裸机 + systemd
 
@@ -177,7 +185,7 @@ nginx -t && systemctl reload nginx
    OJ_LOG_LEVEL=info
    ```
 
-3. API 机放行：gRPC 9090 与测试数据下载 8080 需对该判题机的**内网 IP** 开白名单（防火墙层面，勿对公网开放）。裸机路线 oj-api 默认监听全接口，用 ufw/iptables 收敛；compose 路线默认不发布端口，外接判题机需自行映射并同样收敛。
+3. API 机放行：gRPC 9090 与测试数据下载 8080 需对该判题机的**内网 IP** 开白名单（防火墙层面，勿对公网开放）。裸机路线 oj-api 默认监听全接口，用 ufw/iptables 收敛；compose 路线 api 只回环发布（`127.0.0.1:8080/9090`），跨机判题机需把发布地址改为内网 IP（`ports: ["<内网IP>:9090:9090", ...]`）并同样防火墙收敛。
 4. **必跑自验**：`/opt/oj/oj-judge --selftest`（期望输出见第二节路径 B）。
 5. 只装判题单元：`cp deploy/systemd/oj-judge.service /etc/systemd/system/` → `systemctl daemon-reload && systemctl enable --now oj-judge`。
 
@@ -222,7 +230,7 @@ journalctl -u oj-judge -p err -S -1h       # 判题机最近 1 小时错误
 journalctl -u oj-api -o json | grep submission   # 结构化检索
 ```
 
-Docker Compose 路线没有 journald，用 `docker compose logs -f api` / `docker compose logs -f judge`，日志本体同为单行 JSON。
+Compose 路线下 api 在容器里（`docker compose logs -f api` 查日志，同为单行 JSON），**判题机仍在宿主机**走 journald——即 judge 侧日志查看器/`journalctl` 用法两条路线完全一致，只有 api 换成 `docker compose logs`。
 
 ## 五、任务：我要配好备份与恢复演练
 

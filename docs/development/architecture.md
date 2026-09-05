@@ -112,7 +112,8 @@ frontend/src/
 ## 数据存储
 
 - **PostgreSQL**：两条部署路线口径一致——compose 模板用 `postgres:16-alpine`
-  （`docker-compose.yml`）；裸机 Debian 11 用系统源 PostgreSQL 13（tech-stack.md 记 13.23）。
+  （`docker-compose.yml`，postgres/redis/api/web 四件容器化，判题机跑宿主机）；
+  裸机 Debian 11 用系统源 PostgreSQL 13（tech-stack.md 记 13.23）。
   GORM 双方言（postgres/sqlite）共用 schema，dev 默认 SQLite 零依赖。
 - **Redis**：仅作判题队列（List，RPush/BLPop），不当缓存也不当数据库；队列是
   best-effort，丢了我从 PostgreSQL 重建（见判题数据流第 5 步）。
