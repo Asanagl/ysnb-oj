@@ -31,16 +31,21 @@ const FULL_NAME: Record<string, string> = {
   JUDGING: '评测中',
 }
 
-// 圆点配色（与全站判定色板一致的 CSS 变量）
+// 圆点配色（判定色底 + 白字，对错一目了然）
 const DOT: Record<string, string> = {
-  AC: 'bg-ac',
-  WA: 'bg-wa',
-  TLE: 'bg-tle',
-  MLE: 'bg-tle',
-  RE: 'bg-wa',
-  CE: 'bg-pending',
-  SE: 'bg-wa',
-  SKIPPED: 'bg-muted',
+  AC: 'bg-ac text-white',
+  WA: 'bg-wa text-white',
+  TLE: 'bg-tle text-white',
+  MLE: 'bg-tle text-white',
+  RE: 'bg-wa text-white',
+  CE: 'bg-pending text-white',
+  SE: 'bg-wa text-white',
+  SKIPPED: 'bg-muted text-muted-foreground',
+}
+// 对错符号：✓ 正确 / ✗ 错误 / – 跳过 / ? 待定
+const MARK: Record<string, string> = {
+  AC: '✓', WA: '✗', TLE: '✗', MLE: '✗', RE: '✗',
+  SE: '✗', SKIPPED: '–', CE: '?',
 }
 const TONE: Record<string, string> = {
   AC: 'text-ac',
@@ -97,7 +102,12 @@ const dotClass = (i: number) => {
 }
 const dotTitle = (i: number) => {
   const s = dotStatus(i)
-  return s ? `#${i} ${s}` : `#${i} 待评测`
+  return s ? `#${i} ${s}${MARK[s] ? ' ' + MARK[s] : ''}` : `#${i} 待评测`
+}
+// 圆点内容：编号 + 对错符号（✓/✗），无状态时不带符号
+const dotLabel = (i: number) => {
+  const s = dotStatus(i)
+  return s && MARK[s] ? `${i}${MARK[s]}` : `${i}`
 }
 const progressText = computed(() =>
   isActive.value && total.value > 0 ? `${doneCount.value}/${total.value}` : '',
@@ -142,7 +152,7 @@ const showMetrics = computed(
           :class="dotClass(i)"
           :title="dotTitle(i)"
         >
-          {{ i }}
+          {{ dotLabel(i) }}
         </span>
       </div>
 
