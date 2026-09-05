@@ -223,9 +223,12 @@ func (s *Server) Router() *gin.Engine {
 	// admin-tier; user-facing bind/report endpoints are self-service.
 	staff.GET("/plugins", s.pluginList)
 	admin.GET("/plugins/sources", s.pluginSources)
-	setter2 := api.Group("/external/problems", auth.RequireAuth(), auth.RequireRole(model.RoleSetter, model.RoleAdmin, model.RoleSuperAdmin), s.userWriteLimiter(6, 60))
-	setter2.POST("/preview", s.previewExternalProblem)
-	setter2.POST("/import", s.importExternalProblem)
+	// 外站题目导入（全员）：一般用户导入的题进入待审核（隐藏），setter+
+	// 免审核；preview 无副作用同权开放；sources 只暴露爬虫名列表。
+	extImport := api.Group("/external/problems", auth.RequireAuth(), s.userWriteLimiter(6, 60))
+	extImport.GET("/sources", s.externalProblemSources)
+	extImport.POST("/preview", s.previewExternalProblem)
+	extImport.POST("/import", s.importExternalProblem)
 	// event hook target management (admin): webhook endpoints for bots
 	admin.GET("/hooks", s.listHookTargets)
 	admin.PUT("/hooks/:name", s.setHookTarget)

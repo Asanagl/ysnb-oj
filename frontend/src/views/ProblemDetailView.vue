@@ -47,6 +47,15 @@ const submitting = ref(false)
 // 实时判定卡片：WS 推送驱动，断线自动降级轮询（useLiveSubmission）
 const { snap: liveSnap, caseDots: liveCases, caseTotal: liveTotal, set: liveSet, track: liveTrack, refresh: liveRefresh } = useLiveSubmission()
 
+// 待补测试数据标记（派生：外部导入来源 + 0 测试点），仅对出题人/管理员展示
+const needsTestdata = computed(
+  () =>
+    !!problem.value &&
+    (problem.value.problem.source ?? '').includes('外部训练题') &&
+    problem.value.case_count === 0 &&
+    auth.canManage,
+)
+
 const statementHTML = computed(() =>
   problem.value ? renderStatement(problem.value.problem.statement_md) : '',
 )
@@ -170,7 +179,10 @@ const canEditSolution = (sol: ProblemSolution) =>
   <div v-if="problem">
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-[13fr_11fr]">
       <Card class="p-5">
-        <h2 class="text-xl font-semibold">{{ problem.problem.title }}</h2>
+        <h2 class="flex flex-wrap items-center gap-2 text-xl font-semibold">
+          {{ problem.problem.title }}
+          <Badge v-if="needsTestdata" variant="pending" class="text-xs">待补测试数据</Badge>
+        </h2>
         <p class="text-muted-foreground">
           时限 {{ problem.problem.time_limit_ms }} ms · 内存 {{ problem.problem.mem_limit_mb }} MB
           · 测试点 {{ problem.case_count }}

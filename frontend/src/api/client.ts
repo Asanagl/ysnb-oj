@@ -736,8 +736,13 @@ export const External = {
     return r.data as { meta: ProblemMeta }
   },
   async importProblem(source: string, externalId: string, visibility?: string) {
-    const r = await api.post('/external/problems/import', { source, external_id: externalId, visibility })
-    return r.data as { problem: Problem; source: string; external_id: string; notes: string[] }
+    const r = await api.post(`/external/problems/import`, { source, external_id: externalId, visibility })
+    return r.data as { problem: Problem; source: string; external_id: string; notes: string[]; needs_review: boolean }
+  },
+  // 全员可用的可导入平台列表（只暴露爬虫名，不含插件内部信息）
+  async importSources() {
+    const r = await api.get(`/external/problems/sources`)
+    return r.data as { problem_sources: string[] }
   },
 }
 

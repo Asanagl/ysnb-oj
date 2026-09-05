@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Users, type UserProfile } from '../api/client'
+import { Users, errMsg, External, type ExternalBinding, type UserProfile } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import StatusTag from '../components/StatusTag.vue'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Stat } from '@/components/ui/stat'
 import { cssVar, useChart } from '@/composables/useChart'
+import { toast } from '@/lib/toast'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -118,6 +121,7 @@ watchTheme(drawAll)
 
 onMounted(async () => {
   await load()
+  await loadExt()
   // restore the persisted platform selection after the profile arrives
   const saved = localStorage.getItem('oj_heat_platforms')
   if (saved) {
@@ -156,6 +160,57 @@ const acRate = computed(() => {
   const total = Object.values(profile.value.by_status).reduce((a, b) => a + b, 0)
   return total === 0 ? '0' : Math.round(((profile.value.by_status['AC'] ?? 0) / total) * 100) + '%'
 })
+
+// ===== 外站 OJ 刷题数据（仅本人资料页显示的快捷入口）=====
+const isOwn = computed(() => route.path === '/profile')
+const extBindings = ref<ExternalBinding[]>([])
+const extPlatforms = ref<string[]>([])
+const extBindPlatform = ref('')
+const extBindHandle = ref('')
+const extBusy = ref(false)
+
+async function loadExt() {
+  if (!isOwn.value) return
+  try {
+    const p = await External.platforms()
+    extBindings.value = p.bindings
+    extPlatforms.value = p.platforms
+    if (!extBindPlatform.value && extPlatforms.value.length) extBindPlatform.value = extPlatforms.value[0]
+  } catch {
+    /* 不阻塞资料页 */
+  }
+}
+
+async function extBind() {
+  if (!extBindPlatform.value || !extBindHandle.value.trim()) {
+    toast.warning('请选择平台并填写用户名/ID')
+    return
+  }
+  extBusy.value = true
+  try {
+    const r = await External.bind(extBindPlatform.value, extBindHandle.value.trim())
+    if (r.error) toast.warning(`已绑定，但同步失败：${r.error}`)
+    else toast.success(`已绑定并同步 ${r.stored} 条新记录`)
+    extBindHandle.value = ''
+    await loadExt()
+  } catch (e) {
+    toast.error(errMsg(e))
+  } finally {
+    extBusy.value = false
+  }
+}
+
+async function extSync(row: ExternalBinding) {
+  extBusy.value = true
+  try {
+    const r = await External.sync(row.platform)
+    if (r.error) toast.warning(`同步失败：${r.error}`)
+    else toast.success(`新增 ${r.stored} 条记录`)
+    await loadExt()
+  } finally {
+    extBusy.value = false
+  }
+}
 </script>
 
 <template>
@@ -233,6 +288,53 @@ const acRate = computed(() => {
           variant="info"
           title="暂无标签数据——提交的题目带有标签后，这里会展示强弱项分布"
         />
+      </CardContent>
+    </Card>
+
+    <Card v-if="isOwn" class="mt-3">
+      <CardContent class="p-6">
+        <div class="mb-3 flex flex-wrap items-center gap-3">
+          <h4 class="m-0 text-base font-semibold">外站 OJ 刷题数据</h4>
+          <span class="text-xs text-muted-foreground">
+            绑定 Codeforces / 洛谷 / AtCoder / 牛客，每小时自动同步并合并进上方热力图
+          </span>
+          <span class="flex-1" />
+          <router-link to="/external" class="text-sm text-primary hover:underline">
+            完整报表与题目导入 →
+          </router-link>
+        </div>
+        <div class="mb-3 flex flex-wrap gap-2">
+          <select
+            v-model="extBindPlatform"
+            class="h-9 rounded-md border border-border bg-card px-3 text-sm"
+          >
+            <option v-for="p in extPlatforms" :key="p" :value="p">{{ p }}</option>
+          </select>
+          <Input
+            v-model="extBindHandle"
+            class="w-[240px]"
+            placeholder="平台用户名 / ID"
+            @keyup.enter="extBind"
+          />
+          <Button :disabled="extBusy" @click="extBind">
+            {{ extBusy ? '同步中…' : '绑定并立即同步' }}
+          </Button>
+        </div>
+        <div v-if="extBindings.length" class="flex flex-wrap gap-2">
+          <Badge
+            v-for="row in extBindings"
+            :key="row.platform"
+            :variant="row.last_error ? 'tle' : 'ac'"
+            class="cursor-pointer px-3 py-1.5"
+            :title="row.last_error ? `同步失败：${row.last_error}（点击重试）` : `最近同步 ${row.synced_at ? new Date(row.synced_at).toLocaleString() : '从未'}（点击重试）`"
+            @click="extSync(row)"
+          >
+            {{ row.platform }} · {{ row.handle }}
+          </Badge>
+        </div>
+        <p v-else class="text-sm text-muted-foreground">
+          还没有绑定外部平台账号——绑定后做题记录会合并进个人热力图。
+        </p>
       </CardContent>
     </Card>
 

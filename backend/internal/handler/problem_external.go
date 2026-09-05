@@ -39,6 +39,13 @@ func (s *Server) pluginSources(c *gin.Context) {
 	})
 }
 
+// externalProblemSources lists importable problem platforms for the all-user
+// import UI — deliberately narrow: only the crawler names, no plugin
+// internals, and it sits behind RequireAuth like the rest of the import flow.
+func (s *Server) externalProblemSources(c *gin.Context) {
+	c.JSON(200, gin.H{"problem_sources": plugin.ProblemSourceNames()})
+}
+
 // previewExternalProblem fetches metadata without creating anything — the
 // setter sees what would be imported first.
 func (s *Server) previewExternalProblem(c *gin.Context) {
@@ -84,6 +91,9 @@ func (s *Server) importExternalProblem(c *gin.Context) {
 		return
 	}
 	claims := auth.CurrentUser(c)
+	// setter 及以上（setter/admin/super_admin）：免审核直接入正式题库
+	canManage := claims.Role == model.RoleSetter || claims.Role == model.RoleAdmin ||
+		claims.Role == model.RoleSuperAdmin
 	visibility := orDefault(req.Visibility, model.VisibilityMembers)
 	if visibility != model.VisibilityMembers && visibility != model.VisibilityHidden &&
 		visibility != model.VisibilityPublic {
@@ -105,11 +115,19 @@ func (s *Server) importExternalProblem(c *gin.Context) {
 		MemLimitMB:  orDefaultInt(meta.MemLimitMB, 256),
 		Visibility:  visibility,
 		JudgeMode:   model.JudgeModeDefault,
-		// Imported external problems carry no testdata; keep them out of the
-		// review pipeline but visible only to logged-in users by default.
-		ReviewStatus: ReviewApproved,
 		CreatedBy:    claims.UserID,
 	}
+	// 审核流：一般用户导入的题与用户自建题一样先进待审核（隐藏），
+	// 管理员审核通过后公开；setter 及以上免审核直接入正式题库。
+	if canManage {
+		prob.ReviewStatus = ReviewApproved
+	} else {
+		prob.ReviewStatus = ReviewPending
+		prob.Visibility = model.VisibilityHidden
+	}
+	// Imported external problems carry no testdata; the SPA marks them
+	// 「待补测试数据」(derived: external source + zero cases) until a
+	// setter/admin uploads testdata.
 	if strings.TrimSpace(prob.Title) == "" {
 		prob.Title = sourceTag
 	}
@@ -119,7 +137,8 @@ func (s *Server) importExternalProblem(c *gin.Context) {
 	}
 	c.JSON(200, gin.H{
 		"problem": prob, "source": meta.Source, "external_id": meta.ExternalID,
-		"notes": meta.Notes,
+		"notes":        meta.Notes,
+		"needs_review": !canManage,
 	})
 }
 

@@ -69,6 +69,17 @@ func (s *Server) setSuperRole(c *gin.Context) {
 			return
 		}
 	}
+	// 唯一 super_admin（自动继任）：系统任意时刻恰有一名超级管理员
+	// （uid 0 的 bootstrap admin 是第一任）。授予 target super_admin 时，
+	// 其余现任 super_admin 自动降为 admin——传位而不是并存。
+	if req.Role == model.RoleSuperAdmin && !auth.IsSuperAdmin(user.Role) {
+		if err := s.DB.Model(&model.User{}).
+			Where("role = ? AND id <> ?", model.RoleSuperAdmin, user.ID).
+			Update("role", model.RoleAdmin).Error; err != nil {
+			c.JSON(500, gin.H{"error": "succession failed"})
+			return
+		}
+	}
 	if err := s.DB.Model(user).Update("role", req.Role).Error; err != nil {
 		c.JSON(500, gin.H{"error": "update role failed"})
 		return

@@ -28,6 +28,7 @@ const navItems = [
   { path: '/contests', label: '比赛' },
   { path: '/lists', label: '题单' },
   { path: '/teams', label: '小组' },
+  { path: '/external', label: '刷题数据' },
   { path: '/profile', label: '个人中心' },
 ]
 
