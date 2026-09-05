@@ -45,7 +45,7 @@ const lang = ref('cpp')
 const code = ref('')
 const submitting = ref(false)
 // 实时判定卡片：WS 推送驱动，断线自动降级轮询（useLiveSubmission）
-const { snap: liveSnap, set: liveSet, track: liveTrack, refresh: liveRefresh } = useLiveSubmission()
+const { snap: liveSnap, caseDots: liveCases, caseTotal: liveTotal, set: liveSet, track: liveTrack, refresh: liveRefresh } = useLiveSubmission()
 
 const statementHTML = computed(() =>
   problem.value ? renderStatement(problem.value.problem.statement_md) : '',
@@ -205,7 +205,7 @@ const canEditSolution = (sol: ProblemSolution) =>
             {{ submitting ? '提交中…' : '提交' }}
           </Button>
         </Card>
-        <LiveVerdictCard v-if="liveSnap" :submission="liveSnap" class="mt-3" />
+        <LiveVerdictCard v-if="liveSnap" :submission="liveSnap" :live-cases="liveCases" :live-total="liveTotal" class="mt-3" />
       </div>
     </div>
 

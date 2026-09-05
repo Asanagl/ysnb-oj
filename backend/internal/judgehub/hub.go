@@ -202,10 +202,37 @@ func (h *Hub) readLoop(stream pb.JudgeRelay_ConnectServer, conn *daemonConn) {
 			h.handleHeartbeat(conn, body.Heartbeat)
 		case *pb.DaemonMessage_Result:
 			h.handleResult(conn, body.Result)
+		case *pb.DaemonMessage_CaseProgress:
+			h.handleCaseProgress(conn, body.CaseProgress)
 		case *pb.DaemonMessage_Register:
 			// protocol violation mid-stream; ignore
 		}
 	}
+}
+
+// handleCaseProgress fans one finished test case out to the submission's WS
+// topic so the owner's card lights the dot up Hydro-style. Gated on the
+// inflight table so a confused daemon cannot broadcast progress for
+// submissions it was not leased; the WS topic itself is owner-only (see
+// handler's wsTopicAuth). Delivery is best-effort — the final TaskResult is
+// authoritative and the card also has a poll fallback.
+func (h *Hub) handleCaseProgress(conn *daemonConn, cp *pb.CaseProgress) {
+	subID := cp.GetSubmissionId()
+	h.mu.Lock()
+	owner, ok := h.inflight[subID]
+	h.mu.Unlock()
+	if !ok || owner != conn.info.Name {
+		return
+	}
+	h.WS.Publish(fmt.Sprintf("submission:%d", subID), map[string]any{
+		"kind":      "case",
+		"index":     cp.GetIndex(),
+		"status":    cp.GetStatus(),
+		"time_ms":   cp.GetTimeMs(),
+		"memory_kb": cp.GetMemoryKb(),
+		"score":     cp.GetScore(),
+		"total":     cp.GetTotal(),
+	})
 }
 
 func (h *Hub) handleHeartbeat(conn *daemonConn, hb *pb.Heartbeat) {

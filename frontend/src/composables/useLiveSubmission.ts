@@ -1,8 +1,8 @@
-// 实时判题状态跟踪（纯前端）：订阅 WS 主题 submission:<id>，后端在入队
-// (PENDING) / 开判 (JUDGING) / 终态推送事件；断线自动降级为 1.5s 轮询直到
-// 终态（复用旧 pollSubmission 语义）。终态 WS 推送只有摘要字段
-//（status/time_ms/memory_kb/score），逐 case 与 compile_message 由调用方
-// 在 onFinal 里 refresh() 重拉全量快照。
+// 实时判题状态跟踪（纯前端）：订阅 WS 主题 submission:<id>。后端在入队
+// (PENDING) / 开判 (JUDGING) / 逐 case 完成（kind:"case"，Hydro 式逐点亮
+// 起）/ 终态时推送；断线自动降级为 1.5s 轮询直到终态。终态 WS 推送只有
+// 摘要字段，逐 case 全量与 compile_message 由调用方在 onFinal 里 refresh()
+// 重拉。主题为属主可见（订阅时后端查属主），他人提交轮询兜底仍可用。
 import { onBeforeUnmount, ref } from 'vue'
 import { Submissions, connectWS, type Submission } from '../api/client'
 
@@ -13,17 +13,31 @@ export function isFinalStatus(status: string) {
   return !ACTIVE_STATUS.includes(status)
 }
 
+export interface CaseDot {
+  index: number
+  status: string
+  time_ms?: number
+  memory_kb?: number
+  score?: number
+}
+
 interface StatusPush {
   id?: number
   status?: string
   time_ms?: number
   memory_kb?: number
   score?: number
+  kind?: string
+  index?: number
+  total?: number
 }
 
 export function useLiveSubmission() {
   const snap = ref<Submission | null>(null)
   const status = ref('')
+  // 判中过程的逐 case 点（终态后以 snap.cases 全量为准）
+  const caseDots = ref<CaseDot[]>([])
+  const caseTotal = ref(0)
   const isFinal = isFinalStatus
   let ws: ReturnType<typeof connectWS> | null = null
   let pollTimer: number | null = null
@@ -53,6 +67,20 @@ export function useLiveSubmission() {
   }
 
   function applyPush(p: StatusPush) {
+    if (p.kind === 'case') {
+      // Hydro 式逐 case 点亮；total 随首包/变化更新
+      if (typeof p.index !== 'number' || typeof p.status !== 'string') return
+      if (typeof p.total === 'number' && p.total > 0) caseTotal.value = p.total
+      const dot: CaseDot = {
+        index: p.index, status: p.status,
+        time_ms: p.time_ms, memory_kb: p.memory_kb, score: p.score,
+      }
+      const i = caseDots.value.findIndex((d) => d.index === dot.index)
+      if (i >= 0) caseDots.value.splice(i, 1, dot)
+      else caseDots.value.push(dot)
+      caseDots.value.sort((a, b) => a.index - b.index)
+      return
+    }
     if (typeof p.status !== 'string') return
     status.value = p.status
     if (snap.value) {
@@ -85,6 +113,11 @@ export function useLiveSubmission() {
       try {
         const s = await Submissions.get(currentId)
         applySnapshot(s)
+        // 轮询拿到的 cases 快照同样可以点亮进度
+        if (s.cases?.length) {
+          caseTotal.value = Math.max(caseTotal.value, s.cases.length)
+          for (const c of s.cases) applyPush({ kind: 'case', index: c.index, status: c.status, time_ms: c.time_ms, memory_kb: c.mem_kb, score: c.score })
+        }
         if (isFinal(s.status)) settleFinal()
       } catch {
         /* 下一轮重试 */
@@ -97,6 +130,8 @@ export function useLiveSubmission() {
     stopTracking()
     currentId = s.id
     applySnapshot(s)
+    caseDots.value = (s.cases ?? []).map((c) => ({ index: c.index, status: c.status, time_ms: c.time_ms, memory_kb: c.mem_kb, score: c.score }))
+    caseTotal.value = caseDots.value.length
   }
 
   // 开始实时跟踪：订阅 WS + 首次 GET 对账（补上订阅建立前的状态跃迁）
@@ -121,5 +156,5 @@ export function useLiveSubmission() {
   }
   onBeforeUnmount(stop)
 
-  return { snap, status, set, track, refresh, stop }
+  return { snap, status, caseDots, caseTotal, set, track, refresh, stop }
 }

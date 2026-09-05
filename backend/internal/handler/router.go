@@ -5,6 +5,7 @@ package handler
 import (
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -245,21 +246,43 @@ func (s *Server) Router() *gin.Engine {
 	// WebSocket upgrades authenticate via ?token=: browsers cannot set the
 	// Authorization header on a WebSocket, so RequireAuth would 401 forever.
 	// admin:* topics require the admin role (BUG-005).
-	api.GET("/ws", s.wsAuth(), s.WS.Handler(wsTopicAuth))
+	api.GET("/ws", s.wsAuth(), s.WS.Handler(s.wsTopicAuthorizer()))
 	return r
 }
 
-// wsTopicAuth restricts infrastructure topics to admins (super_admin
-// included via isAdminRole); ordinary topics (submission:N, contest:N) are
-// fine for any logged-in user.
-func wsTopicAuth(role, topic string) bool {
-	if strings.HasPrefix(topic, "admin:") {
-		return isAdminRole(role)
+// wsTopicAuthorizer restricts infrastructure topics to admins (super_admin
+// included via isAdminRole); contest topics are fine for any logged-in user;
+// per-submission topics are OWNER-ONLY (or admin): per-case progress and
+// verdict pushes are live judging intel that must not be observable by other
+// users during an active contest. Owner check = one indexed lookup per
+// subscribe request (subscriptions are rare).
+func (s *Server) wsTopicAuthorizer() wsq.TopicAuthorizer {
+	return func(role string, userID uint, topic string) bool {
+		if strings.HasPrefix(topic, "admin:") {
+			return isAdminRole(role)
+		}
+		if strings.HasPrefix(topic, "submission:") {
+			id, err := strconv.ParseUint(strings.TrimPrefix(topic, "submission:"), 10, 64)
+			if err != nil || id == 0 {
+				return false
+			}
+			if isAdminRole(role) {
+				return true
+			}
+			if userID == 0 {
+				return false
+			}
+			var owner int64
+			s.DB.Model(&model.Submission{}).Where("id = ?", id).Limit(1).Pluck("user_id", &owner)
+			return owner > 0 && uint(owner) == userID
+		}
+		return true
 	}
-	return true
 }
 
 // wsAuth validates the query-string JWT before the connection upgrades.
+// Sets the same context keys as the auth middleware (role + id included) —
+// the WS topic authorizer needs the full identity, not just claims.
 func (s *Server) wsAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims, err := s.JWT.Parse(c.Query("token"))
@@ -268,6 +291,8 @@ func (s *Server) wsAuth() gin.HandlerFunc {
 			return
 		}
 		c.Set(auth.ClaimsKey, claims)
+		c.Set(auth.RoleKey, claims.Role)
+		c.Set(auth.IDKey, claims.UserID)
 		c.Next()
 	}
 }

@@ -35,7 +35,7 @@ const lang = ref('cpp')
 const code = ref('')
 const submitting = ref(false)
 // 实时判定卡片：比赛题与补题模式通用；WS 推送 + 断线轮询兜底
-const { snap: liveSnap, set: liveSet, track: liveTrack, refresh: liveRefresh } = useLiveSubmission()
+const { snap: liveSnap, caseDots: liveCases, caseTotal: liveTotal, set: liveSet, track: liveTrack, refresh: liveRefresh } = useLiveSubmission()
 
 const statementHTML = computed(() =>
   problem.value ? renderStatement(problem.value.problem.statement_md) : '',
@@ -147,7 +147,7 @@ async function submit() {
         </CardContent>
       </Card>
 
-      <LiveVerdictCard v-if="liveSnap" :submission="liveSnap" />
+      <LiveVerdictCard v-if="liveSnap" :submission="liveSnap" :live-cases="liveCases" :live-total="liveTotal" />
     </div>
   </div>
 </template>
