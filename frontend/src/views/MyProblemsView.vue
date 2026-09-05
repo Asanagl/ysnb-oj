@@ -32,6 +32,11 @@ const statusText: Record<string, string> = {
 const statusVariant = (s: string) =>
   s === 'approved' ? 'ac' : s === 'rejected' ? 'destructive' : 'secondary'
 
+// 待补测试数据标记（派生）：外部导入来源 + 0 测试点
+const isExternal = (source?: string) => (source ?? '').includes('外部训练题')
+const needsTestdata = (row: { source?: string; case_count?: number }) =>
+  isExternal(row.source) && (row.case_count ?? 0) === 0
+
 async function load() {
   problems.value = await MyProblems.list()
 }
@@ -80,7 +85,14 @@ async function resubmit(row: { id: number; title: string }) {
         <TableBody>
           <TableRow v-for="row in problems" :key="row.id">
             <TableCell>{{ row.id }}</TableCell>
-            <TableCell>{{ row.title }}</TableCell>
+            <TableCell>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span>{{ row.title }}</span>
+                <Badge v-if="needsTestdata(row)" variant="pending" class="text-[11px]">
+                  待补测试数据
+                </Badge>
+              </div>
+            </TableCell>
             <TableCell>
               <Badge :variant="statusVariant(row.review_status ?? '')">
                 {{ statusText[row.review_status ?? ''] ?? row.review_status }}

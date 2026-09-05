@@ -3,6 +3,7 @@
 // → 合并热力图 + 各平台统计 + 跨平台最近 AC。默认查看自己；他人主页路由
 // /users/:id 仍走 ProfileView，这里加 ?user= 供未来扩展。
 import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { errMsg, External, Users, type ExternalBinding, type ExternalReport } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import { Alert } from '@/components/ui/alert'
@@ -17,6 +18,7 @@ import { confirmDialog } from '@/lib/confirm'
 import { toast } from '@/lib/toast'
 
 const auth = useAuthStore()
+const router = useRouter()
 const userId = computed(() => auth.user?.id ?? 0)
 const report = ref<ExternalReport | null>(null)
 const bindings = ref<ExternalBinding[]>([])
@@ -36,7 +38,10 @@ async function load() {
   await nextTick(drawHeat)
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadSources()
+})
 
 function drawHeat() {
   if (!report.value || !heatRef.value) return
@@ -113,10 +118,94 @@ const platformTag = (p: string) => p
 
 // keep Users import meaningful (used by callers navigating here from profile)
 void Users
+
+// ===== 外站题目导入（全员）=====
+const impSource = ref('')
+const impSources = ref<string[]>([])
+const impID = ref('')
+const impBusy = ref(false)
+const impPreview = ref<{ title: string; url: string } | null>(null)
+
+async function loadSources() {
+  if (impSources.value.length) return
+  try {
+    impSources.value = (await External.importSources()).problem_sources ?? []
+    if (!impSource.value && impSources.value.length) impSource.value = impSources.value[0]
+  } catch {
+    /* 插件列表拉取失败不阻塞页面 */
+  }
+}
+
+async function impPreviewRun() {
+  if (!impID.value.trim()) {
+    toast.warning('请填写外部题号（如 1900A / P1001）')
+    return
+  }
+  impBusy.value = true
+  impPreview.value = null
+  try {
+    const r = await External.previewProblem(impSource.value, impID.value.trim())
+    impPreview.value = { title: r.meta.title, url: r.meta.url }
+  } catch (e) {
+    toast.error(errMsg(e))
+  } finally {
+    impBusy.value = false
+  }
+}
+
+async function impImport() {
+  impBusy.value = true
+  try {
+    const r = await External.importProblem(impSource.value, impID.value.trim())
+    if (r.needs_review) {
+      toast.success(`已导入并提交审核（审核通过后公开）。题面与样例已带入，测试数据需管理员/出题人补充。`)
+    } else {
+      toast.success(`已导入 #${r.problem.id}（外部题面，无测试数据，请补充后使用）`)
+      router.push(`/problems/${r.problem.id}/edit`)
+      return
+    }
+    impID.value = ''
+    impPreview.value = null
+  } catch (e) {
+    toast.error(errMsg(e))
+  } finally {
+    impBusy.value = false
+  }
+}
 </script>
 
 <template>
   <div class="mx-auto max-w-[1000px]">
+    <Card class="mb-4">
+      <CardHeader>
+        <CardTitle>导入外站题目</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div class="mb-3 flex flex-wrap gap-2">
+          <Select v-model="impSource">
+            <SelectTrigger class="w-40"><SelectValue placeholder="平台" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="p in impSources" :key="p" :value="p">{{ p }}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input v-model="impID" class="w-[240px]"
+            placeholder="外部题号（如 1900A / P1001）" @keyup.enter="impPreviewRun" />
+          <Button variant="outline" :disabled="impBusy" @click="impPreviewRun">预览题面</Button>
+          <Button :disabled="impBusy || !impPreview" @click="impImport">
+            {{ impBusy ? '导入中…' : '导入' }}
+          </Button>
+        </div>
+        <div v-if="impPreview" class="mb-3 rounded-md border border-border p-3 text-sm">
+          <a :href="impPreview.url" target="_blank" rel="noreferrer" class="font-semibold text-primary hover:underline">
+            {{ impPreview.title }}
+          </a>
+          <span class="ml-2 text-xs text-muted-foreground">原题链接（导入不抓取测试数据）</span>
+        </div>
+        <Alert variant="info"
+          title="导入内容 = 题面 + 公开样例；测试数据不抓取，导入后标记「待补测试数据」，由出题人/管理员补充。一般用户导入的题需管理员审核通过后公开。" />
+      </CardContent>
+    </Card>
+
     <Card class="mb-4">
       <CardHeader>
         <CardTitle>外部平台绑定（刷题统计报表）</CardTitle>

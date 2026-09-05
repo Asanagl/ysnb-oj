@@ -182,6 +182,13 @@ func createSuperadmin(db *gorm.DB, username, password string) {
 	if err != nil {
 		fatal("hash 失败: %v", err)
 	}
+	// 唯一 super_admin（自动继任）：新任就任前，其余现任 super_admin
+	// 自动降为 admin——与 API 端 setSuperRole 语义一致。
+	if err := db.Model(&model.User{}).
+		Where("role = ? AND username <> ?", model.RoleSuperAdmin, username).
+		Update("role", model.RoleAdmin).Error; err != nil {
+		fatal("继任降级失败: %v", err)
+	}
 	u := &model.User{}
 	err = db.Where("username = ?", username).First(u).Error
 	if err != nil {

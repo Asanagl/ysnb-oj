@@ -44,13 +44,42 @@ func (s *Server) createUserProblem(c *gin.Context) {
 	c.JSON(200, prob)
 }
 
-// myProblems: the author's own problems (any review state).
+// myProblems: the author's own problems (any review state). Each row carries
+// case_count so the SPA can derive the「待补测试数据」marker for imported
+// external problems (external source + zero cases).
 func (s *Server) myProblems(c *gin.Context) {
 	claims := auth.CurrentUser(c)
 	var problems []model.Problem
 	s.DB.Where("created_by = ? AND contest_id IS NULL", claims.UserID).
 		Order("id DESC").Limit(100).Find(&problems)
-	c.JSON(200, problems)
+	var counts []struct {
+		ProblemID uint  `json:"problem_id"`
+		N         int64 `json:"n"`
+	}
+	if len(problems) > 0 {
+		ids := make([]uint, 0, len(problems))
+		for i := range problems {
+			ids = append(ids, problems[i].ID)
+		}
+		s.DB.Model(&model.TestCase{}).
+			Select("problem_id, COUNT(*) as n").
+			Where("problem_id IN ?", ids).
+			Group("problem_id").Scan(&counts)
+	}
+	byID := make(map[uint]int64, len(counts))
+	for _, c := range counts {
+		byID[c.ProblemID] = c.N
+	}
+	out := make([]gin.H, 0, len(problems))
+	for i := range problems {
+		p := problems[i]
+		out = append(out, gin.H{
+			"id": p.ID, "title": p.Title, "source": p.Source,
+			"visibility": p.Visibility, "review_status": p.ReviewStatus,
+			"created_at": p.CreatedAt, "case_count": byID[p.ID],
+		})
+	}
+	c.JSON(200, out)
 }
 
 // updateMyProblem: the author edits their own draft/rejected problem; edits

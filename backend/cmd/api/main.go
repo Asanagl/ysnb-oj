@@ -147,6 +147,9 @@ func run(cfgPath string) error {
 
 // bootstrapAdmin creates the initial admin from OJ_ADMIN_USERNAME /
 // OJ_ADMIN_PASSWORD on first boot only; no default credentials exist.
+// The initial admin is THE one super_admin with id 0 (root convention):
+// fresh installs get uid 0; role uniqueness (exactly one super_admin) is
+// enforced at grant time with automatic succession.
 func bootstrapAdmin(db *gorm.DB) error {
 	var count int64
 	db.Model(&model.User{}).Count(&count)
@@ -162,13 +165,18 @@ func bootstrapAdmin(db *gorm.DB) error {
 	if err != nil {
 		return err
 	}
-	if err := db.Create(&model.User{
-		Username: username, PasswordHash: hash,
-		Nickname: "Admin", Role: model.RoleAdmin,
+	// map-based create so id=0 survives GORM's zero-value omission (a
+	// struct create would drop ID 0 and let the sequence assign 1)
+	if err := db.Model(&model.User{}).Create(map[string]any{
+		"id":            0,
+		"username":      username,
+		"password_hash": hash,
+		"nickname":      "Admin",
+		"role":          model.RoleSuperAdmin,
 	}).Error; err != nil {
 		return fmt.Errorf("bootstrap admin: %w", err)
 	}
-	slog.Info("bootstrap admin created", "username", username)
+	slog.Info("bootstrap admin created", "username", username, "uid", 0, "role", "super_admin")
 	return nil
 }
 

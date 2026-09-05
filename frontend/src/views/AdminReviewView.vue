@@ -72,7 +72,14 @@ async function review(id: number, action: 'approve' | 'reject') {
         <TableBody>
           <TableRow v-for="row in items" :key="row.id">
             <TableCell>{{ row.id }}</TableCell>
-            <TableCell>{{ row.title }}</TableCell>
+            <TableCell>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span>{{ row.title }}</span>
+                <Badge v-if="(row.source ?? '').includes('外部训练题')" variant="tle" class="text-[11px]">
+                  外部导入 · 待补测试数据
+                </Badge>
+              </div>
+            </TableCell>
             <TableCell>{{ row.created_by }}</TableCell>
             <TableCell>{{ row.time_limit_ms }} ms</TableCell>
             <TableCell>
