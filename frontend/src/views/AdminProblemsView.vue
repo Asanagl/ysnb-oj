@@ -96,6 +96,8 @@ async function openExternal() {
 }
 
 // preview then import in two steps; import is the only write.
+// 注意：meta.statement_md 可能为空（CF 等平台反爬/题面抓取失败）——
+// 必须兜底为空串，否则模板里 .slice() 抛错导致预览面板永远不出现。
 async function extPreviewRun() {
   if (!extID.value.trim()) {
     toast.warning('请填写外部题号（如 1900A / P1001）')
@@ -107,7 +109,7 @@ async function extPreviewRun() {
     const r = await External.previewProblem(extSource.value, extID.value.trim())
     extPreview.value = {
       title: r.meta.title, url: r.meta.url,
-      statement_md: r.meta.statement_md, notes: r.meta.notes ?? [],
+      statement_md: r.meta.statement_md ?? '', notes: r.meta.notes ?? [],
     }
   } catch (e) {
     toast.error(errMsg(e))
@@ -204,7 +206,8 @@ async function extImport() {
           <div v-if="extPreview" class="max-h-80 overflow-auto rounded-md border border-border p-3">
             <p><b>{{ extPreview.title }}</b></p>
             <p class="text-xs text-muted-foreground">{{ extPreview.url }}</p>
-            <pre class="whitespace-pre-wrap text-xs">{{ extPreview.statement_md.slice(0, 1500) }}</pre>
+            <pre v-if="extPreview.statement_md" class="whitespace-pre-wrap text-xs">{{ extPreview.statement_md.slice(0, 1500) }}</pre>
+            <p v-else class="text-sm text-wa">⚠ 该平台未返回题面内容（可能反爬或题面为图形/公式渲染），请打开原题链接人工补充题面。</p>
             <p v-for="(n, i) in extPreview.notes" :key="i" class="text-xs text-tle">⚠ {{ n }}</p>
           </div>
           <DialogFooter>
