@@ -91,6 +91,12 @@ judge through any public channel.**
 
 The audit trail lives in [docs/archive/security-audit.md](docs/archive/security-audit.md).
 
+## Community
+
+Questions, feedback or just want to see how others use it? Join the QQ
+group: **958494161**. You can also reach the maintainer directly:
+QQ **384538983**.
+
 ## Contributing
 
 Issues and pull requests are welcome — see

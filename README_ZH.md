@@ -81,6 +81,11 @@ cBPF 白名单（默认 SIGKILL），判题网络命名空间内无网络。逃�
 
 审计记录见 [docs/archive/security-audit.md](docs/archive/security-audit.md)。
 
+## 联系与交流
+
+使用问题、功能建议或想交流部署经验，欢迎加入 QQ 群：**958494161**。
+也可以直接联系维护者：QQ **384538983**。
+
 ## 参与贡献
 
 欢迎 Issue 与 PR，流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
