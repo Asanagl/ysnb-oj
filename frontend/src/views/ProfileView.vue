@@ -133,8 +133,15 @@ onMounted(async () => {
   }
 })
 
-const extPlatformNames = computed(() =>
-  Object.keys(profile.value?.platforms?.[0]?.by_platform ?? {}))
+// platform names present in ANY daily bucket (the oldest bucket is usually
+// empty — scanning only platforms[0] hid the checkboxes entirely)
+const extPlatformNames = computed(() => {
+  const names = new Set<string>()
+  for (const b of profile.value?.platforms ?? []) {
+    for (const k of Object.keys(b.by_platform ?? {})) names.add(k)
+  }
+  return [...names]
+})
 
 function togglePlatform(p: string, checked: boolean) {
   if (checked) heatPlatforms.value = [...heatPlatforms.value, p]
