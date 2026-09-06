@@ -24,21 +24,23 @@ import (
 
 // ProblemMeta is the normalized result of fetching an external problem:
 // statement text, public samples and limits. Hidden judging testdata is
-// structurally absent — external sites only publish samples.
+// structurally absent — external sites only publish samples. JSON tags are
+// lowercase-snake (matching the SPA's client.ts types): an untagged struct
+// serialized as "StatementMD" and the frontend silently read undefined.
 type ProblemMeta struct {
-	Source      string  // plugin name, e.g. "codeforces"
-	ExternalID  string  // platform-native key, e.g. "1900A"
-	URL         string  // canonical problem URL
-	Title       string  //
-	StatementMD string  // markdown; HTML sources are converted by the plugin
-	InputDesc   string  //
-	OutputDesc  string  //
-	Hint        string  //
-	TimeLimitMS int     // 0 = unknown
-	MemLimitMB  int     // 0 = unknown
-	Tags        []string //
-	Samples     []Sample //
-	Notes       []string // non-fatal anomalies, surfaced to the importer UI
+	Source      string   `json:"source"`
+	ExternalID  string   `json:"external_id"`
+	URL         string   `json:"url"`
+	Title       string   `json:"title"`
+	StatementMD string   `json:"statement_md"`
+	InputDesc   string   `json:"input_desc"`
+	OutputDesc  string   `json:"output_desc"`
+	Hint        string   `json:"hint"`
+	TimeLimitMS int      `json:"time_limit_ms"`
+	MemLimitMB  int      `json:"mem_limit_mb"`
+	Tags        []string `json:"tags"`
+	Samples     []Sample `json:"samples"`
+	Notes       []string `json:"notes"` // non-fatal anomalies, surfaced to the importer UI
 }
 
 // Sample is one public example pair (mirrors model.Sample without the
