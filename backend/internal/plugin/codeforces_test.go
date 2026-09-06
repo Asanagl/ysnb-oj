@@ -6,13 +6,14 @@ import (
 )
 
 // 最小化的 Codeforces 题面页 fixture：复刻 problem-statement 的真实结构
-// （header + 同级章节 div + sample-test 内 pre 交替 输入/输出，新版样例行
-// 包在 test-example-line div 里）。
+// （header + 无 class 正文 div + 同级章节 div + sample-test 内 pre 交替
+// 输入/输出，新版样例行包在 test-example-line div 里；公式含 MathJax
+// 渲染残渣 span 与 $$$...$$$ 三美元源文本）。
 const cfFixtureHTML = `<!DOCTYPE html><html><body>
 <div class="problem-statement">
  <div class="header"><div class="title">A. Pockets</div>
   <div class="time-limit">1 second</div><div class="memory-limit">256 megabytes</div></div>
- <div>You are given three integers.</div>
+ <div>You are given $$$n$$$ coins. In the first example the answer is <span class="MathJax" tabindex="0"><span style="color:#cc0000">2</span></span> coins total.</div>
  <div class="input-specification"><div class="section-title">Input</div>
   <p>The first line contains an integer <span class="tex-span">n</span> (1 &le; n &le; 100).</p>
   <p>The second line contains <span class="tex-span">n</span> integers.</p>
@@ -28,7 +29,7 @@ const cfFixtureHTML = `<!DOCTYPE html><html><body>
    <div class="output"><div class="title">Output</div><pre>1</pre></div>
   </div></div>
  <div class="note"><div class="section-title">Note</div><p>In the first example the answer is 2.</p></div>
-</div></body></html>`
+</div><div id="footer">Codeforces footer</div></body></html>`
 
 func TestCFSection(t *testing.T) {
 	got := cfSection(cfFixtureHTML, "input-specification")
@@ -52,6 +53,45 @@ func TestCFHTMLToText(t *testing.T) {
 	if strings.Contains(got, "<") || strings.Contains(got, "Input") {
 		t.Fatalf("tags/titles not stripped: %q", got)
 	}
+	// 段落分隔：两个 <p> 之间应有空行（Markdown 段落）
+	if !strings.Contains(got, ").\n\nThe second line") {
+		t.Fatalf("paragraph break missing: %q", got)
+	}
+}
+
+func TestCFStripMathJax(t *testing.T) {
+	frag := cfProblemStatementBlock(cfFixtureHTML)
+	story := frag
+	for _, cut := range []string{
+		cfSection(frag, "header"),
+		cfSection(frag, "input-specification"),
+		cfSection(frag, "output-specification"),
+		cfSection(frag, "sample-tests"),
+		cfSection(frag, "note"),
+	} {
+		if cut != "" {
+			story = strings.Replace(story, cut, "", 1)
+		}
+	}
+	text := cfHTMLToText(story)
+	// MathJax 残渣必须被整块删除（不得留下 style/color 碎片）
+	if strings.Contains(text, "cc0000") || strings.Contains(text, "MathJax") || strings.Contains(text, "style=") {
+		t.Fatalf("mathjax residue leaked: %q", text)
+	}
+	// 正文段保留（此前版本丢失），且 $$$ 三美元归一为 $$
+	if !strings.Contains(text, "You are given") {
+		t.Fatalf("story paragraph lost: %q", text)
+	}
+	if strings.Contains(text, "$$$") {
+		t.Fatalf("triple-dollar not normalized: %q", text)
+	}
+	if !strings.Contains(text, "$$n$$") {
+		t.Fatalf("expected $$n$$ after normalization: %q", text)
+	}
+	// 页脚不进入正文
+	if strings.Contains(text, "Codeforces footer") {
+		t.Fatalf("footer leaked into story: %q", text)
+	}
 }
 
 func TestCFSamplePairs(t *testing.T) {
@@ -72,16 +112,27 @@ func TestCFSamplePairs(t *testing.T) {
 }
 
 func TestCFEnrichFillsStatement(t *testing.T) {
-	// 不打真实网络：只验证组装逻辑对 fixture 的行为
-	meta := &ProblemMeta{StatementMD: ""}
-	pageHTML := cfFixtureHTML
-	inputSpec := cfHTMLToText(cfSection(pageHTML, "input-specification"))
-	outputSpec := cfHTMLToText(cfSection(pageHTML, "output-specification"))
-	var b strings.Builder
-	b.WriteString("## 输入\n\n" + inputSpec + "\n\n")
-	b.WriteString("## 输出\n\n" + outputSpec + "\n\n")
-	if strings.TrimSpace(b.String()) == "" {
-		t.Fatal("assembled statement empty")
+	// 不打真实网络：只验证组装逻辑对 fixture 的行为（与 cfEnrichStatement
+	// 的组装顺序一致：正文 → 输入 → 输出 → 样例 → 备注）
+	block := cfProblemStatementBlock(cfFixtureHTML)
+	if block == "" {
+		t.Fatal("problem-statement block empty")
 	}
-	_ = meta
+	story := block
+	for _, cut := range []string{
+		cfSection(block, "header"),
+		cfSection(block, "input-specification"),
+		cfSection(block, "output-specification"),
+		cfSection(block, "sample-tests"),
+		cfSection(block, "note"),
+	} {
+		if cut != "" {
+			story = strings.Replace(story, cut, "", 1)
+		}
+	}
+	text := cfHTMLToText(story)
+	if !strings.Contains(text, "You are given") {
+		t.Fatalf("story missing: %q", text)
+	}
+	// 样例代码块的 Markdown 结构：``` 前后必须有空行
 }

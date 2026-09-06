@@ -212,33 +212,89 @@ func cfSection(html, class string) string {
 	return rest[:end]
 }
 
-// cfHTMLToText 把章节片段压成纯文本：CF 新版样例把每行输入包在
-// <div class="test-example-line"> 里（转成换行），其余标签剥除，实体还原。
+// MathJax 渲染残渣：CF 题面页对公式同时有 $$$...$$$ 源文本和渲染后的
+// 备用 HTML（嵌套 span，剥标签会留下 "in math mode at position" 报错
+// 碎片）。必须在剥标签前整块删除。mjx-container 是 MathJax 3 的另一种输出。
+var (
+	cfMathJaxSpanRe = regexp.MustCompile(`(?s)<span[^>]*class="[^"]*(?:MathJax|mjx-)[^"]*"[^>]*>.*?</span>`)
+	cfMjxContainerRe = regexp.MustCompile(`(?s)<mjx-container[^>]*>.*?</mjx-container>`)
+)
+
+// stripMathJax removes rendered MathJax leftovers (nested spans need a few
+// passes: inner spans surface as outer spans are removed).
+func stripMathJax(s string) string {
+	for i := 0; i < 6; i++ {
+		next := cfMjxContainerRe.ReplaceAllString(s, "")
+		next = cfMathJaxSpanRe.ReplaceAllString(next, "")
+		if next == s {
+			break
+		}
+		s = next
+	}
+	return s
+}
+
+// cfHTMLToText 把章节片段压成 Markdown 友好的纯文本：
+//   - 先删除 MathJax 渲染残渣（否则剥标签后残留样式碎片污染正文）
+//   - div/p 边界转段落换行（<p>/<div> 开头也转换行，段落间自然出现空行）
+//   - 剥标签、实体还原
+//   - Codeforces 的公式源用 $$$...$$$（三美元），站内 KaTeX 只认 $$，归一
+//   - "Input/Output/Note" 等 section 标题残行剔除
 func cfHTMLToText(fragment string) string {
-	s := strings.ReplaceAll(fragment, "</div>", "\n")
+	s := stripMathJax(fragment)
+	s = strings.ReplaceAll(s, "<p>", "\n")
+	s = strings.ReplaceAll(s, "<div>", "\n")
+	s = strings.ReplaceAll(s, "</div>", "\n")
 	s = strings.ReplaceAll(s, "</p>", "\n")
 	s = strings.ReplaceAll(s, "<br>", "\n")
 	s = strings.ReplaceAll(s, "<br/>", "\n")
 	s = strings.ReplaceAll(s, "<br />", "\n")
-	// 去掉 section-title 之类的标题行残留
-	tagRe := regexp.MustCompile(`<[^>]*>`)
-	s = tagRe.ReplaceAllString(s, "")
+	s = tagStripRe.ReplaceAllString(s, "")
 	s = html.UnescapeString(s)
+	// CF 源文本的三美元 display math → 站内 KaTeX 的双美元
+	s = strings.ReplaceAll(s, "$$$", "$$")
 	lines := strings.Split(s, "\n")
 	out := make([]string, 0, len(lines))
 	for _, ln := range lines {
 		ln = strings.TrimSpace(ln)
-		if ln == "" || ln == "Input" || ln == "Output" || ln == "Note" || ln == "Examples" || ln == "Example" {
+		if ln == "" {
+			// 空行 = Markdown 段落分隔，保留（连续空行压成一个）；
+			// 首尾的空行在最后 TrimSpace 时清掉
+			if n := len(out); n == 0 || out[n-1] != "" {
+				out = append(out, "")
+			}
+			continue
+		}
+		if ln == "Input" || ln == "Output" || ln == "Note" || ln == "Examples" || ln == "Example" {
 			continue
 		}
 		out = append(out, ln)
 	}
-	return strings.Join(out, "\n")
+	joined := strings.Join(out, "\n")
+	return strings.TrimSpace(joined)
 }
 
 var cfSamplePreRe = regexp.MustCompile(`(?s)<pre[^>]*>(.*?)</pre>`)
 
-// cfEnrichStatement 抓题面页并填充 StatementMD（输入/输出说明 + 样例）。
+// cfProblemStatementBlock 切出 problem-statement 整块（到页脚锚点为止）。
+// 页面里 problem-statement 是最后一个主块，取到 footer/页脚标记即可。
+func cfProblemStatementBlock(pageHTML string) string {
+	start := strings.Index(pageHTML, `<div class="problem-statement`)
+	if start < 0 {
+		return ""
+	}
+	rest := pageHTML[start:]
+	end := len(rest)
+	for _, anchor := range []string{`id="footer"`, `<footer`, `class="footer`} {
+		if i := strings.Index(rest, anchor); i >= 0 && i < end {
+			end = i
+		}
+	}
+	return rest[:end]
+}
+
+// cfEnrichStatement 抓题面页并填充 StatementMD：题目正文段（无 class 的
+// 直接子 div，此前版本丢失）+ 输入/输出说明 + 样例代码块 + 备注。
 // 一切失败都原样返回 error 由调用方降级为 Notes 提示。
 func cfEnrichStatement(ctx context.Context, meta *ProblemMeta) error {
 	page, err := SafeHTTPGet(ctx, meta.URL)
@@ -249,41 +305,66 @@ func cfEnrichStatement(ctx context.Context, meta *ProblemMeta) error {
 	if !strings.Contains(pageHTML, "problem-statement") {
 		return fmt.Errorf("page has no problem-statement block (anti-bot or gym page)")
 	}
-	inputSpec := cfHTMLToText(cfSection(pageHTML, "input-specification"))
-	outputSpec := cfHTMLToText(cfSection(pageHTML, "output-specification"))
-	note := cfHTMLToText(cfSection(pageHTML, "note"))
+	block := cfProblemStatementBlock(pageHTML)
+	if block == "" {
+		return fmt.Errorf("problem-statement block empty")
+	}
+	// 题目正文：整块减去 header 与四个已知章节后的剩余
+	story := block
+	for _, cut := range []string{
+		cfSection(block, "header"),
+		cfSection(block, "input-specification"),
+		cfSection(block, "output-specification"),
+		cfSection(block, "sample-tests"),
+		cfSection(block, "note"),
+	} {
+		if cut != "" {
+			story = strings.Replace(story, cut, "", 1)
+		}
+	}
+	story = cfHTMLToText(story)
+
+	inputSpec := cfHTMLToText(cfSection(block, "input-specification"))
+	outputSpec := cfHTMLToText(cfSection(block, "output-specification"))
+	note := cfHTMLToText(cfSection(block, "note"))
 
 	var b strings.Builder
+	if story != "" {
+		b.WriteString(story + "\n\n")
+	}
 	if inputSpec != "" {
 		b.WriteString("## 输入\n\n" + inputSpec + "\n\n")
 	}
 	if outputSpec != "" {
 		b.WriteString("## 输出\n\n" + outputSpec + "\n\n")
 	}
-	// 样例：sample-tests 内的 pre 交替为 输入/输出
-	samplesHTML := cfSection(pageHTML, "sample-tests")
+	// 样例：sample-tests 内的 pre 交替为 输入/输出；代码块前后必须空行，
+	// 否则 Markdown 解析器不认（行内 ``` 会被当纯文本）。
+	samplesHTML := cfSection(block, "sample-tests")
 	if samplesHTML != "" {
 		pre := cfSamplePreRe.FindAllStringSubmatch(samplesHTML, -1)
-		b.WriteString("## 样例\n\n")
-		for i, m := range pre {
-			body := strings.ReplaceAll(m[1], "</div>", "\n")
-			body = html.UnescapeString(strings.TrimSpace(tagStripRe.ReplaceAllString(body, "")))
-			if body == "" {
-				continue
-			}
-			if i%2 == 0 {
-				b.WriteString("输入：\n```\n" + body + "\n```\n")
-			} else {
-				b.WriteString("输出：\n```\n" + body + "\n```\n")
+		if len(pre) > 0 {
+			b.WriteString("## 样例\n\n")
+			for i, m := range pre {
+				body := strings.ReplaceAll(m[1], "</div>", "\n")
+				body = html.UnescapeString(strings.TrimSpace(tagStripRe.ReplaceAllString(body, "")))
+				if body == "" {
+					continue
+				}
+				label := "输入"
+				if i%2 == 1 {
+					label = "输出"
+				}
+				b.WriteString(label + "：\n\n```\n" + body + "\n```\n\n")
 			}
 		}
 	}
 	if note != "" {
-		b.WriteString("## 备注\n\n" + note + "\n")
+		b.WriteString("## 备注\n\n" + note + "\n\n")
 	}
 	if strings.TrimSpace(b.String()) == "" {
 		return fmt.Errorf("no statement sections extracted")
 	}
-	meta.StatementMD = strings.TrimSpace(meta.StatementMD + "\n\n" + b.String())
+	meta.StatementMD = strings.TrimSpace(b.String())
 	return nil
 }
