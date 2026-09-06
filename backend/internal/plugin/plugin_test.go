@@ -145,13 +145,14 @@ func TestAtcoderVerdict(t *testing.T) {
 }
 
 func TestParseAtcoderSubmissions(t *testing.T) {
-	page := []byte(`<html><script>var x = [{"ID":"123","EpochSecond":1700000000,"ProblemID":"abc300_a","ProblemTitle":"A","Language":"C++","Status":"AC","ContestID":"abc300","SubmissionTime":"x"}];</script></html>`)
+	// kenkoooo API payload: bare JSON array with lowercase snake keys
+	page := []byte(`[{"id":72850918,"epoch_second":1769838735,"problem_id":"abc129_a","contest_id":"abc129","language":"C++23 (GCC 15.2.0)","point":100,"result":"AC","user_id":"scrrrrad"}]`)
 	subs, err := parseAtcoderSubmissions(page)
-	if err != nil || len(subs) != 1 || subs[0].ID != "123" {
+	if err != nil || len(subs) != 1 || subs[0].ID != 72850918 || subs[0].Result != "AC" {
 		t.Fatalf("parse failed: %v %+v", err, subs)
 	}
 	if _, err := parseAtcoderSubmissions([]byte("<html>nothing</html>")); err == nil {
-		t.Fatal("page without payload must fail")
+		t.Fatal("non-JSON payload must fail")
 	}
 }
 
