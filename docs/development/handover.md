@@ -26,15 +26,24 @@ Never Be rejected）。明确排除了复用 go-judge、二开 Hydro / DOMjudge 
 
 - **赛制**：ACM + IOI（case-scores 按测试点部分分）、组队赛、封榜/滚榜、
   补题模式、首败即停。
+- **实时判题状态**：提交后页面原地跟进 排队中 → 评测中 → 终态（完整判定名），
+  判题机逐测试点完成即流式上报、前端 Hydro 风格圆点条逐个点亮 + n/m 进度；
+  `submission:<id>` WS 主题属主可见（或 admin）。入口组件
+  `LiveVerdictCard` + `useLiveSubmission`，挂在题目页 / 比赛题页 / 提交
+  详情页。
 - **题目**：SPJ / 交互题、题单（训练计划）、小组（组队/公告/共享题单）、
   用户出题 + 审核流、题解区（提交后解锁）、题目包导入（自有 / DOMjudge /
-  Hydro 三种格式）。
+  Hydro 三种格式）、外站题目导入（全员开放：普通用户走审核流并带
+  「待补测试数据」标记，setter 及以上免审核）。
 - **M5 插件系统**：三类扩展点 ProblemSource（题目爬取）/
   SubmitLogFetcher（刷题同步）/ EventHook（判题事件钩子），内置
   codeforces / luogu / atcoder / nowcoder 适配器 + webhook 钩子；
   支撑外部题导入与共享导出。
-- **外部刷题同步**：小时级 ticker 拉取绑定用户的多平台提交记录，个人
-  热力图多平台合并展示。
+- **外部刷题同步**：小时级 ticker 拉取绑定用户的多平台提交记录，已整合
+  进个人中心（绑定管理、统计徽章、跨平台最近 AC、热力图多平台合并、
+  外站题目导入入口）。
+- **角色**：super_admin 全站**唯一**（自动继任：授予即传位），新装首建
+  管理员固定 uid 0；admin 及以下可多人。
 - **公开 API**：`/public/*` + API Key 鉴权 + cph 桥接（Competitive
   Companion / VSCode cph 直接导入题目样例）。
 - **/admin 独立后台**：用户、题目、比赛、审核、判题机、插件、API Key、
@@ -112,6 +121,8 @@ internal/sysload/     负载采样（Linux-only，build tag 隔离）
 | 改公开 API / cph | `handler/public_api.go`、`handler/public_cph.go`（cph 桥接只出样例，绝不出站完整测试数据）；细则见 [api.md](../reference/api.md) |
 | 改插件 | `internal/plugin/plugin.go` + 对应适配器文件；管理端接口在 `handler/plugins_admin.go` |
 | 改判题调度/日志锚点 | `internal/judgehub/tasks.go`——INFO `submission judged` 锚点行在这里 |
+| 改实时判题进度上报 | `pkg/judge` 的 `Task.OnCase`（串行/停败/并行三路径触发）→ `internal/daemon` 的 `CaseProgress` 上报 → `internal/judgehub/hub.go` 的 `handleCaseProgress`（校验 inflight 归属后转 WS）；best-effort，不得阻塞判题 |
+| 改 `submission:<id>` WS 权限 | `handler/router.go` 的 `wsTopicAuthorizer`——属主/admin 才可订阅，属主判定查库 |
 | 改沙箱/判题 | 先读 [judge-sandbox.md](judge-sandbox.md) 再动手；`pkg/sandbox/seccomp_sim_test.go` 是 seccomp 解释器护栏测试 |
 | 加评测语言 | 只改 `pkg/judge/languages.yaml` |
 
@@ -119,15 +130,19 @@ internal/sysload/     负载采样（Linux-only，build tag 隔离）
 
 ```
 src/api/client.ts     全部后端接口的 TS 封装（唯一 HTTP 出口，加接口先加这里）
-src/router/index.ts   路由 + 角色守卫（/admin 子路由含 logs 日志查看器页）
+src/router/index.ts   路由 + 角色守卫（/admin 子路由含 logs 日志查看器页；
+                      /external 已删除并重定向 /profile——刷题数据整合进个人中心）
 src/stores/auth.ts    Pinia 会话状态
 src/views/            页面：Admin* 九个后台页（含 AdminLogsView 日志查看器）、
-                      ProblemEditor / MyProblemEditor 全页出题器、
-                      ExternalPracticeView 外部刷题报表等
+                      ProblemEditor / MyProblemEditor 全页出题器；
+                      外部平台绑定 / 刷题统计 / 外站题目导入已整合进
+                      ProfileView（原 ExternalPracticeView 已删除）
 src/layouts/          MainLayout（选手侧）/ AdminLayout（后台）
 src/components/       CodeEditor（CodeMirror 6）、MarkdownEditor（TipTap）、
-                      ScoreBoard、ui/（shadcn-vue 组件）
-src/composables/      useChart（ECharts）、useTheme、useResponsive
+                      ScoreBoard、LiveVerdictCard（实时判定卡片：状态推进 +
+                      测试点圆点条 + 完整判定名）、ui/（shadcn-vue 组件）
+src/composables/      useChart（ECharts）、useTheme、useResponsive、
+                      useLiveSubmission（提交状态 WS 跟进 + 断线轮询兜底）
 ```
 
 ## 五、日常开发流程

@@ -36,7 +36,7 @@ features:
 
 | 文档 | 内容 |
 |---|---|
-| [选手手册](./guide/user-guide) | 注册、刷题、判定状态、比赛、小组、个人主页、外部刷题绑定、FAQ |
+| [选手手册](./guide/user-guide) | 注册、刷题与实时判定、比赛、小组、个人主页（外站刷题数据与外站题目导入）、FAQ |
 | [管理与出题手册](./guide/admin-guide) | 角色权限、出题（标准/SPJ/交互/IOI 分值表）、办赛、审核、判题机监控、日志查看器、API 密钥、插件 |
 | [SPJ 与交互题约定](./guide/interactive) | checker / interactor 调用约定、题目包格式对接 |
 

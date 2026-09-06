@@ -69,7 +69,7 @@ backend/
 │   ├── public/          API Key 凭据模型（库里只存 sha256）
 │   ├── logx/            slog JSON → stderr → journald；OJ_LOG_LEVEL 免重编译调级别
 │   ├── queue/           队列抽象（Redis List / 内存双实现）
-│   ├── wsq/             WebSocket 主题广播（submission:N / contest:N / admin:daemons）
+│   ├── wsq/             WebSocket 主题广播（submission:N 属主可见 / contest:N / admin:daemons）
 │   ├── auth/            JWT + bcrypt + RBAC 中间件
 │   ├── model/ store/    GORM 模型与迁移
 │   └── config/ sysload/ 配置加载 / 宿主机负载采样（后台判题机监控）
@@ -80,7 +80,7 @@ backend/
 frontend/src/
 ├── layouts/             MainLayout（用户面）与 AdminLayout（独立后台外壳，按角色分级显菜单）
 ├── views/               页面（Admin*View 系列挂在 AdminLayout 下）
-├── composables/         useChart / useResponsive / useTheme（跨页复用的组合式逻辑）
+├── composables/         useChart / useResponsive / useTheme / useLiveSubmission（提交状态实时跟进）
 ├── lib/                 toast / confirm / utils（UI 原语）
 ├── api/client.ts        axios 集中封装
 └── stores/              Pinia（auth）
@@ -99,12 +99,18 @@ frontend/src/
    提交置 `JUDGING` + 15 分钟租约 → WS 广播 `submission:<id>`。
 3. 判题机按 sha256 经 `/internal/testdata` 回源下载缺失测试数据并缓存 → 编译（带缓存，
    checker/interactor 同理）→ 逐测试点沙箱运行 → 比对/特判/交互 → 回传 `TaskResult`
-   （含逐点 verdict 与得分）。
+   （含逐点 verdict 与得分）。每个测试点亮出结果后，判题机还会经同一条 gRPC 流
+   即时上报 `CaseProgress`（best-effort：发送失败只丢进度不影响判题与最终结果），
+   judgehub 校验该提交确在此判题机名下后转 WS 推送。
 4. `finalize` 落库（status/time_ms/memory_kb/score/cases，租约清除）→ 打 INFO 日志
    `submission judged`（每条提交一行，是日志查看器按提交 id / verdict 检索的主锚点）→
    WS 广播 `submission:<id>`；比赛提交额外广播 `contest:<id>`（standings-dirty，榜单增量
    刷新）；判题机上下线广播 `admin:daemons`（仅 admin 可订阅）；
    `plugin.EmitJudgeEvent` 在独立 goroutine 异步扇出 webhook 钩子，绝不阻塞判题。
+   `submission:<id>` 的消费者 = 题目页 / 比赛题页 / 提交详情页（前端
+   `useLiveSubmission` 订阅，驱动实时判定卡片与测试点圆点条，断线自动降级轮询）；
+   该主题**属主可见**（或 admin）——判题实况不对其他选手暴露，属主判定在
+   订阅时查库（`handler/router.go` 的 `wsTopicAuthorizer`）。
 5. 容错：判题机断线 → 其租约内任务立即重回 `PENDING`；API 启动时 `RequeuePending` 全量
    重建队列，后台 `StartRequeueScanner` 兜底处理 lease 过期的孤儿任务——数据库是唯一
    真源，队列随时可重建。
