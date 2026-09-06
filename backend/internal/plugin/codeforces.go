@@ -112,11 +112,18 @@ type cfFetcher struct{}
 
 func (cfFetcher) Name() string { return "codeforces" }
 
+// cfProblem mirrors the nested "problem" object CF returns inside every
+// user.status row — the flat problemIndex/problemName fields do not exist
+// at the top level (mapping them left problem_id = bare contest id and an
+// empty name, which poisoned the practice stats).
 type cfSub struct {
 	ID                  int    `json:"id"`
 	ContestID           int    `json:"contestId"`
-	ProblemIndex        string `json:"problemIndex"`
-	ProblemName         string `json:"problemName"`
+	Problem             struct {
+		ContestID int    `json:"contestId"`
+		Index     string `json:"index"`
+		Name      string `json:"name"`
+	} `json:"problem"`
 	ProgrammingLanguage string `json:"programmingLanguage"`
 	Verdict             string `json:"verdict"`
 	CreationTimeSeconds int64  `json:"creationTimeSeconds"`
@@ -143,11 +150,16 @@ func (cfFetcher) FetchSubmitLog(ctx context.Context, username string, needAll bo
 	}
 	out := make([]SubmitRecord, 0, len(payload.Result))
 	for _, s := range payload.Result {
+		// gym rows carry their own contestId; prefer the nested problem's
+		contestID := s.Problem.ContestID
+		if contestID == 0 {
+			contestID = s.ContestID
+		}
 		out = append(out, SubmitRecord{
 			Platform: "codeforces",
 			ExternalID: strconv.Itoa(s.ID),
-			ProblemID:  fmt.Sprintf("%d%s", s.ContestID, s.ProblemIndex),
-			ProblemName: s.ProblemName,
+			ProblemID:  fmt.Sprintf("%d%s", contestID, s.Problem.Index),
+			ProblemName: s.Problem.Name,
 			Verdict:    cfNormalizeVerdict(s.Verdict),
 			Language:   s.ProgrammingLanguage,
 			At:         s.CreationTimeSeconds,
