@@ -59,7 +59,8 @@ const router = createRouter({
           component: () => import('../views/ContestProblemView.vue'),
         },
         { path: 'profile', component: () => import('../views/ProfileView.vue') },
-        { path: 'external', component: () => import('../views/ExternalPracticeView.vue') },
+        // 刷题数据已整合进个人中心（/profile）；老链接重定向防断链
+        { path: 'external', redirect: '/profile' },
         { path: 'my/problems', component: () => import('../views/MyProblemsView.vue') },
         { path: 'users/:id', component: () => import('../views/ProfileView.vue') },
         { path: 'lists', component: () => import('../views/ListsView.vue') },
