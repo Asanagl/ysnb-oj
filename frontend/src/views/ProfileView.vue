@@ -186,6 +186,7 @@ const extStats = computed(() => extReport.value?.by_platform ?? [])
 const extRecentAc = computed(() => extReport.value?.recent_ac ?? [])
 
 async function loadExt() {
+  if (userId.value == null) return
   if (!isOwn.value) {
     // 他人资料页：只拉统计（不含绑定/管理）
     try {
