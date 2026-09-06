@@ -216,13 +216,17 @@ func cfSection(html, class string) string {
 // 备用 HTML（嵌套 span，剥标签会留下 "in math mode at position" 报错
 // 碎片）。必须在剥标签前整块删除。mjx-container 是 MathJax 3 的另一种输出。
 var (
-	cfMathJaxSpanRe = regexp.MustCompile(`(?s)<span[^>]*class="[^"]*(?:MathJax|mjx-)[^"]*"[^>]*>.*?</span>`)
+	cfMathJaxSpanRe  = regexp.MustCompile(`(?s)<span[^>]*class="[^"]*(?:MathJax|mjx-)[^"]*"[^>]*>.*?</span>`)
 	cfMjxContainerRe = regexp.MustCompile(`(?s)<mjx-container[^>]*>.*?</mjx-container>`)
+	// 页内脚本/样式：script 内容是文本节点，剥标签会整段留下（实测混入
+	// Codeforces.addMathJaxListener 等页内 JS）
+	cfScriptStyleRe = regexp.MustCompile(`(?s)<script[^>]*>.*?</script>|<style[^>]*>.*?</style>`)
 )
 
 // stripMathJax removes rendered MathJax leftovers (nested spans need a few
-// passes: inner spans surface as outer spans are removed).
+// passes: inner spans surface as outer spans are removed) and page scripts.
 func stripMathJax(s string) string {
+	s = cfScriptStyleRe.ReplaceAllString(s, "")
 	for i := 0; i < 6; i++ {
 		next := cfMjxContainerRe.ReplaceAllString(s, "")
 		next = cfMathJaxSpanRe.ReplaceAllString(next, "")
