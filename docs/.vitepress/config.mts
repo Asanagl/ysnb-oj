@@ -2,14 +2,10 @@ import { defineConfig } from 'vitepress'
 
 // YSNB OJ 文档站：任务导向（我要做什么 → 怎么做 → 怎么验证 → 举例）。
 // 结构即读者分型：使用者 / 部署运维 / 开发者 / API 参考 / 历史存档。
-export default defineConfig({
-  title: 'YSNB OJ',
-  description: '完全自研的在线评测系统——文档与运维手册',
+// 双语：root = 简体中文，/en/ = English（docs/en/ 镜像目录）。
+const zh = {
+  label: '简体中文',
   lang: 'zh-CN',
-  cleanUrls: true,
-  // Pages 部署在仓库子路径下，没有 base 会全站丢样式
-  base: '/ysnb-oj/',
-  // 仓库主页的 README 面向开源访客；本配置面向部署/运维/开发者
   themeConfig: {
     nav: [
       { text: '首页', link: '/' },
@@ -73,13 +69,90 @@ export default defineConfig({
       ],
     },
     outline: { level: [2, 3], label: '本页目录' },
-    search: { provider: 'local' },
     docFooter: { prev: '上一页', next: '下一页' },
     lastUpdated: { text: '最后更新', formatOptions: { dateStyle: 'short' } },
     editLink: {
       pattern: 'https://github.com/Asanagl/ysnb-oj/edit/main/docs/:path',
       text: '在 GitHub 上编辑此页',
     },
+  },
+}
+
+const en = {
+  label: 'English',
+  lang: 'en-US',
+  link: '/en/',
+  themeConfig: {
+    nav: [
+      { text: 'Home', link: '/en/' },
+      { text: 'Guide', link: '/en/guide/user-guide' },
+      { text: 'Ops', link: '/en/operations/deploy' },
+      { text: 'Development', link: '/en/development/architecture' },
+      { text: 'API', link: '/en/reference/api' },
+      {
+        text: 'GitHub',
+        link: 'https://github.com/Asanagl/ysnb-oj',
+      },
+    ],
+    sidebar: {
+      '/en/guide/': [
+        {
+          text: 'Guide',
+          items: [
+            { text: 'User guide', link: '/en/guide/user-guide' },
+            { text: 'Admin & authoring', link: '/en/guide/admin-guide' },
+            { text: 'SPJ & interactive', link: '/en/guide/interactive' },
+          ],
+        },
+      ],
+      '/en/operations/': [
+        {
+          text: 'Deploy & operate',
+          items: [
+            { text: 'Deployment', link: '/en/operations/deploy' },
+            { text: 'Ops runbook', link: '/en/operations/maintenance' },
+          ],
+        },
+      ],
+      '/en/development/': [
+        {
+          text: 'Development',
+          items: [
+            { text: 'Handover', link: '/en/development/handover' },
+            { text: 'Architecture', link: '/en/development/architecture' },
+            { text: 'Stack & config', link: '/en/development/tech-stack' },
+            { text: 'Judge & sandbox', link: '/en/development/judge-sandbox' },
+            { text: 'Showcase', link: '/en/development/showcase' },
+          ],
+        },
+      ],
+      '/en/reference/': [
+        {
+          text: 'API reference',
+          items: [{ text: 'Public API', link: '/en/reference/api' }],
+        },
+      ],
+    },
+    outline: { level: [2, 3], label: 'On this page' },
+    docFooter: { prev: 'Previous', next: 'Next' },
+    lastUpdated: { text: 'Last updated', formatOptions: { dateStyle: 'medium' } },
+    editLink: {
+      pattern: 'https://github.com/Asanagl/ysnb-oj/edit/main/docs/:path',
+      text: 'Edit this page on GitHub',
+    },
+  },
+}
+
+export default defineConfig({
+  title: 'YSNB OJ',
+  description: '完全自研的在线评测系统——文档与运维手册',
+  cleanUrls: true,
+  // Pages 部署在仓库子路径下，没有 base 会全站丢样式
+  base: '/ysnb-oj/',
+  // 仓库主页的 README 面向开源访客；本配置面向部署/运维/开发者
+  locales: { root: zh, en },
+  themeConfig: {
+    search: { provider: 'local' },
     footer: {
       message: 'You Submit, Never Be rejected.',
       copyright: 'MIT License · YSNB OJ',

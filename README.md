@@ -1,111 +1,64 @@
+<div align="center">
+
 # YSNB OJ
 
-> **You Submit, Never Be rejected.**
+**You Submit, Never Be rejected.**
 
-**YSNB OJ** 是一套“完全自研”的在线评测系统——Go 1.27 后端 + 自研 Linux 判题沙箱
-+ Vue 3 前端（Tailwind CSS v4 + shadcn-vue，明暗双主题）+ PostgreSQL / Redis。
-从校内 ACM 集训队的日常训练与比赛中长出来，开箱即用：ICPC / IOI 赛制、组队赛、
-封榜滚榜、SPJ / 交互题、多平台刷题数据聚合、公开 API 与 cph 桥接，一个不缺。
+一套“完全自研”的在线评测系统：Go 1.27 后端 + 自研 Linux 判题沙箱 + Vue 3 前端 + PostgreSQL / Redis。从校内 ACM 集训队的日常训练与比赛中长出来，开箱即用。
 
-![首页（亮色主题）](docs/screenshots/home-light.png)
-![比赛榜单（IOI 部分分 / 暗色主题）](docs/screenshots/contest-ioi-dark.png)
-
-<!-- 徽章占位：开源发布时把链接换成你的仓库地址，CI 徽章等 workflow 就绪后再启用 -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Asanagl/ysnb-oj)](https://github.com/Asanagl/ysnb-oj/releases)
 [![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org)
-[![CI](https://img.shields.io/badge/CI-pending-lightgrey)](#)
+[![Docs](https://img.shields.io/badge/Docs-VitePress-646CFF?logo=vitepress&logoColor=white)](https://asanagl.github.io/ysnb-oj/)
+
+**[简体中文](README.md)** | [English](README.en.md)
+
+📖 [在线文档站](https://asanagl.github.io/ysnb-oj/) · 🐛 [Issues](https://github.com/Asanagl/ysnb-oj/issues)
+
+<img src="docs/screenshots/home-light.png" alt="首页（亮色主题）" width="49%"/><img src="docs/screenshots/contest-ioi-dark.png" alt="IOI 榜单（暗色主题）" width="49%"/>
+
+</div>
 
 ---
 
-## 特性
+## 为什么是 YSNB OJ
 
-### 判题核心（自研沙箱）
+市面上的开源 OJ 不少，但判题沙箱大多是复用 go-judge 或二开 Hydro / DOMjudge。
+YSNB OJ 走了一条更难的路线：**判题沙箱完全自研**（cgroup v2 + namespaces +
+seccomp cBPF 白名单 + stage2 重执行），并把校内 ACM 集训队日常训练与比赛真正
+需要的能力做齐——ICPC / IOI 赛制、组队赛、封榜滚榜、SPJ / 交互题、多平台刷题
+数据聚合、公开 API 与 cph 桥接，一个不缺。
 
-- **自研沙箱 `pkg/sandbox`**：每次运行新开一组 namespaces（PID/Mount/Net/IPC/UTS），
-  根文件系统只读重挂（NOSUID/NODEV），唯一可写点为任务工作区；root 完成挂载后
-  降权 uid 65534 运行选手程序
-- **资源防线**：cgroup v2 `memory.max` / `cpu.max` / `pids.max` + RLIMIT
-  （输出封顶/栈/地址空间）+ wall-clock 看门狗（杀 PID1 即灭全树）
-- **seccomp cBPF 白名单**：默认 SIGKILL，禁 socket 系 / ptrace / mount / unshare /
-  setuid 系；白名单采用分块线性链，任意长度安全，并配 cBPF 解释器穷举测试防回归
-- **判题管线 `pkg/judge`**：编译缓存、测试点级并行判题（worker 池）、
-  零分配 token 级流式比对、全判定状态机（AC/WA/TLE/MLE/RE/CE/SE）、重判
-- **比赛首败即停**：比赛内提交一旦某测试点不通过即跳过余下测试点（补题/训练跑满全量），
-  错解判题成本从 O(全部 case) 降到 O(首个失败 case)
-- **语言配置驱动**：C++17 / Python 3 / Java 17 内置档位（时限倍率 + 内存放宽），
-  新语言只需给 `pkg/judge/languages.yaml` 加一段配置再装工具链
+## 功能一览
 
-### 赛制
+| | 特性 |
+|---|---|
+| 🧑‍⚖️ **判题核心** | 自研沙箱（只读根 + uid 65534 降权 + seccomp 白名单 + 看门狗）、编译缓存、测试点并行判题、流式比对；语言配置驱动（C++17 / Python 3 / Java 17 内置，加语言只改 yaml） |
+| 🏆 **赛制** | ACM（实时榜单 / 罚时 / 封榜 / 滚榜揭晓）、IOI（测试点分值表 + 部分分）、组队赛（ICPC 三人一队）、补题模式、首败即停 |
+| 📝 **题目** | Markdown + KaTeX 题面、SPJ / 交互题（testlib 风格约定）、题目包导入导出（自有 / DOMjudge / Hydro）、外站题面爬取、用户出题 + 审核流、题解区（提交解锁） |
+| 📈 **训练** | 题单（进度实时推导）、小组（邀请码 / 公告 / 题单共享 / 队内排行）、个人主页（365 天热力图）、多平台刷题聚合（Codeforces / 洛谷 / AtCoder / 牛客） |
+| ⚡ **实时** | WebSocket 主题订阅：判题状态原地推进、测试点圆点逐个点亮、榜单增量刷新；提交详情页自动跟进 |
+| 🔌 **平台** | 多判题机（gRPC 双向流 + 租约调度）、公开 API + cph 桥接（IDE 一键建题）、webhook 回调、维护 CLI（oj-cli）、结构化日志 + 后台日志查看器 |
+| 🔒 **安全** | 沙箱逃逸测试集常态化运行、登录 / 注册 / 提交限流、安全响应头双层、API 端口不出内网；**完整测试数据永不外泄（公平性红线）** |
 
-- **ACM 赛制**：实时榜单、20 分钟罚时、封榜冻结、赛后滚榜揭晓（逐步公开被冻结名次）
-- **IOI 赛制**：测试点分值表 + 总分校验，部分分解提交（`score=30 + verdict=WA`），
-  榜单按总分展示
-- **组队赛**：ICPC 三人一队，以队报名（仅队长可报）、任一队员提交计入队伍成绩，
-  榜单一行一队（取最早 AC、合并罚时）
-- **裁判工具**：打星（成绩不计排名）、作弊标记（保留行但剔除计分）、
-  手动封榜/解封、调整比赛时间
-- **补题**：比赛结束转入补题模式，提交不再影响榜单，题解区自动开放
-
-### 题目
-
-- **题面**：Markdown + KaTeX 公式渲染，所见即所得编辑（TipTap），样例/标签/时限/内存
-- **SPJ / 交互题**：checker 调用约定 testlib 风格（exit 0=AC / 1=WA），
-  交互题用户程序与 interactor 各自沙箱、经双向管道通信
-- **测试数据**：zip 上传（路径白名单 + 统一重编号，无路径穿越）、逐点 sha256 校验、
-  测试点分值（IOI）
-- **题目包导入导出**：自有格式 + **DOMjudge** + **Hydro** 包全支持，
-  导出包含 checker / interactor
-- **外部题面爬取**：`source + external_id` 一键导入（如 Codeforces 1900A），
-  自动标注来源、默认隐藏待补测试数据
-- **用户出题 + 审核流**：用户建题自动隐藏进入待审队列，审核通过后入库；
-  题解区按「提交过才解锁」门禁，比赛进行中全锁
-
-### 训练
-
-- **题单**：公开浏览，setter 及以上创建/编辑，进度（todo/tried/ac）从提交实时推导
-- **团队/小组**：邀请码加入、队长管理、公告、题单共享、队内排行
-- **个人主页**：365 天做题热力图、30 天趋势、状态分布、按标签统计
-- **多平台刷题聚合**：绑定 Codeforces / 洛谷 / AtCoder / 牛客 账号自动同步，
-  本站与外部平台活动合并成一张热力图 + 平台报表
-
-### 平台
-
-- **多判题机**：gRPC 双向流、判题机主动外连（无需开入站防火墙）、租约调度、
-  断线自动重排、心跳监控
-- **实时推送**：WebSocket 主题订阅（`submission:<id>` / `contest:<id>` /
-  `admin:daemons`），判题结果与榜单增量即时刷新，主题级角色授权
-- **公开 API + cph 桥接**：`/api/v1/public/*` 匿名可读 + API Key，
-  `/problems/:id/cph` 直接输出 cph（VSCode Competitive Programming Helper）
-  可导入的题目 JSON，配合 Competitive Companion 在 IDE 里一键建题
-- **插件系统**：编译期注册表——webhook 判题回调（QQ 机器人挂一个 URL 即可）+
-  Codeforces/洛谷/AtCoder/牛客 适配器 + 题面爬虫，webhook 目标带 SSRF 校验
-- **维护 CLI（oj-cli）**：容器内/裸机直连数据库的应急自救工具——找回超管、
-  重置密码、改角色、生成邀请码、健康诊断，`--token` 二次确认、无网络入口
-- **结构化日志**：API 与判题机统一 slog JSON（logx）→ stderr → journald
-  收口，管理后台「日志查看器」免 SSH 直接检索两服务日志
-- **一键部署 + 备份演练**：`deploy/one-click.sh` 一条命令起全套；
-  每日全量备份（日备 14 天 + 月备 6 个月）+ 每月自动恢复演练
-
-### 实测数字
-
-> 来自 `docs/archive/e2e-report.md` 的云端实测，非实验室理想值（2C4G 单机、API+判题同机）。
+<details>
+<summary><b>实测数字</b>（2C4G 单机云端实测，非实验室理想值）</summary>
 
 | 项 | 结果 |
 |---|---|
 | 提交洪峰 | 8 并发用户 × 8 题 = 64 提交，40s 注入完毕，64/64 AC |
 | 洪峰期间延迟 | API 1.9–3.9 ms；榜单计算 2.1–6.3 ms |
 | 判题稳定性 | 50-case 题 12 连跑 ×2，12/12 AC，零幻影 RE/SE |
-| 端到端回归 | 9 套 E2E 脚本 127 项断言全绿 |
+| 端到端回归 | 六套 E2E 脚本 82 项断言全绿 |
 | 代码规模 | 后端 13.2k 行 Go，前端 6.2k 行 Vue/TS |
-| 界面 | shadcn-vue + Tailwind v4，明暗双主题，移动端自适应 |
 
-## 快速开始
+</details>
 
-### 一键部署（Docker，推荐）
+## 🚀 快速开始
 
-前置：一台 Linux 服务器（Ubuntu 22.04+ / Debian 12+），装好 Docker ≥ 24，
-cgroup v2 已启用（`stat -fc %T /sys/fs/cgroup` 输出 `cgroup2fs`）。
+前置：一台 Linux 服务器（Ubuntu 22.04+ / Debian 12+），Docker ≥ 24，cgroup v2
+已启用（`stat -fc %T /sys/fs/cgroup` 输出 `cgroup2fs`）。
 
 ```bash
 # 1) 开发机构建前端，并同步整个仓库（含 frontend/dist/）到服务器
@@ -118,39 +71,32 @@ bash deploy/one-click.sh
 脚本自动完成：前置检查 → 现场用 openssl 随机生成 `.env`（全部密钥 + admin 初始
 密码，已有 `.env` 不覆盖）→ `docker compose up -d --build`（postgres/redis/api/web
 四件容器化）→ 等待 API 就绪 → 判题机自检（已装则跑 `--selftest`，未装打印三步
-安装指引——判题机跑宿主机，不进容器）→ 安装备份/演练 cron → 前端冒烟。结束时
-打印访问地址与管理员密码。脚本幂等，重复执行安全。
+安装指引——判题机跑宿主机，不进容器）→ 安装备份/演练 cron → 前端冒烟。脚本
+幂等，重复执行安全。
 
-systemd 裸机部署路线（适合校内已有服务器、不想用 Docker）：
-见 **[docs/operations/deploy.md](docs/operations/deploy.md)** 方式 B（systemd 单元 + 环境变量 + nginx 配置齐备）。
+不想用 Docker？[systemd 裸机部署](docs/operations/deploy.md)（方式 B）同样完整。
 
-### 开发（后端仅 Linux；Windows/macOS 只跑前端工具链）
+### 本地开发
 
-**后端不在开发机本地运行**——判题沙箱依赖 cgroup v2 + namespaces，是 Linux-only 的，
-Windows/macOS 上既不支持运行，也不建议跑一个行为不一致的残缺后端。所有后端交互都
-发生在 Linux 部署上（上面任一方式部署出的实例即可）：
+后端是 Linux-only（沙箱依赖 cgroup v2 + namespaces），**不在开发机本地运行**；
+Windows/macOS 只跑前端工具链，`/api` 代理到任意 Linux 部署：
 
 ```bash
-# 前端（本地只跑 vite 工具链，/api 代理到你的 Linux 部署）
 cd frontend
 npm install
 OJ_DEV_API_TARGET=http://<你的部署地址> npm run dev   # http://localhost:5173
-
-# 后端与判题机：在 Linux 上构建、测试、运行（非 Linux 开发机先交叉编译）
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o oj-judge ./cmd/judge
-# 拷到 Linux 服务器后：
-sudo ./oj-judge --selftest     # 验证 cgroup v2 / namespace / seccomp 环境
-sudo ./oj-judge                # 连接 API 开始接单
 ```
 
-跑测试（在 Linux 上，对着真实部署）：
+构建与测试在 Linux 上进行（非 Linux 开发机先交叉编译）：
 
 ```bash
-cd backend && go test ./...    # 沙箱外核心逻辑：比对、聚合判定、榜单、JWT、队列、CSV
-bash scripts/e2e-test.sh       # 一键 API E2E（自启自清，退出码非 0 即失败）
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o oj-judge ./cmd/judge
+sudo ./oj-judge --selftest     # 验证 cgroup v2 / namespace / seccomp 环境
+cd backend && go test ./...    # 沙箱外核心逻辑单测
+bash scripts/e2e-test.sh       # 一键 API E2E（自启自清）
 ```
 
-## 架构
+## 🏗️ 架构
 
 ```
 浏览器 ──Vue3 SPA──► Nginx ──► Go API Server ──► PostgreSQL（生产）/ SQLite（自测）
@@ -167,71 +113,42 @@ bash scripts/e2e-test.sh       # 一键 API E2E（自启自清，退出码非 0 
                            └─ 测试数据 blob 缓存（sha256）
 ```
 
-数据流：提交 → 校验（可见性/语言/比赛窗口/限流）→ 入队 → 判题机经 gRPC 拉取
-任务（代码 + 限制 + 测试点 sha256 清单）→ 按 sha256 增量拉数据并缓存 → 编译
-（带缓存）→ 逐测试点沙箱运行 → 比对/特判/交互 → 回传落库 + WebSocket 广播。
-判题机断线时其在租约内的任务立即重回队列，后台扫描器兜底处理孤儿任务。
-更多细节见 [docs/development/architecture.md](docs/development/architecture.md)。
+## 📚 文档
 
-## 文档地图
-
-在线文档站：<https://asanagl.github.io/ysnb-oj/>（VitePress 自动生成）。
+在线文档站：<https://asanagl.github.io/ysnb-oj/>（**中文** ·
+[English](https://asanagl.github.io/ysnb-oj/en/)）
 
 | 文档 | 内容 |
 |---|---|
-| [docs/guide/user-guide.md](docs/guide/user-guide.md) | 选手手册：注册刷题、结果含义、题单、比赛、小组 |
-| [docs/guide/admin-guide.md](docs/guide/admin-guide.md) | 管理·出题人手册：角色矩阵、出题审核、比赛编排、判题机监控 |
-| [docs/guide/interactive.md](docs/guide/interactive.md) | SPJ / 交互题 checker / interactor 约定 |
-| [docs/operations/deploy.md](docs/operations/deploy.md) | 部署（一键 / Docker Compose / systemd）、备份与恢复演练、故障排查 |
-| [docs/operations/maintenance.md](docs/operations/maintenance.md) | 运维 runbook：巡检、发布升级、磁盘缓存、事故处置 |
-| [docs/development/architecture.md](docs/development/architecture.md) | 架构总览、关键决策、判题数据流、沙箱安全模型 |
-| [docs/development/tech-stack.md](docs/development/tech-stack.md) | 技术选型与版本、OJ_* 环境变量速查、限流阈值 |
-| [docs/development/judge-sandbox.md](docs/development/judge-sandbox.md) | 判题机与沙箱深水区：判题管线、seccomp 白名单、已踩过的坑 |
-| [docs/development/showcase.md](docs/development/showcase.md) | 技术总结：选型权衡、核心难点复盘、量化成果 |
-| [docs/development/handover.md](docs/development/handover.md) | 接手文档：30 分钟定位任何一块代码 |
-| [docs/reference/api.md](docs/reference/api.md) | 公开 API（/public/*）、cph 端点、插件与爬取接口 |
-| [docs/archive/](docs/archive/) | 历史快照（只读存档）：安全审计、上线清单、E2E 报告、云实测报告 |
+| [选手手册](docs/guide/user-guide.md) | 注册刷题、实时判定、结果含义、题单、比赛、小组 |
+| [管理·出题人手册](docs/guide/admin-guide.md) | 角色矩阵、出题审核、比赛编排、判题机监控、日志查看器 |
+| [SPJ / 交互题约定](docs/guide/interactive.md) | checker / interactor 调用约定 |
+| [部署](docs/operations/deploy.md) | 一键 / Docker Compose / systemd、备份恢复、故障排查 |
+| [运维 Runbook](docs/operations/maintenance.md) | 巡检、发布升级、磁盘缓存、事故处置 |
+| [架构总览](docs/development/architecture.md) | 关键决策、判题数据流、沙箱安全模型 |
+| [判题机与沙箱](docs/development/judge-sandbox.md) | 判题管线、seccomp 白名单、深水区 |
+| [公开 API](docs/reference/api.md) | /public/*、cph 端点、API Key |
+| [接手导读](docs/development/handover.md) | 30 分钟定位任何一块代码 |
 
-仓库结构：`backend/`（cmd/api、cmd/judge、cmd/cli、pkg/sandbox、pkg/judge、internal/*）
-· `frontend/`（Vue3 SPA）· `deploy/`（nginx、systemd、one-click.sh、备份脚本）
-· `configs/`（配置示例，无真实凭据）· `docs/` · `scripts/`（E2E 与压测脚本）。
+完整地图见 [docs/README.md](docs/README.md)。
 
-## 安全
+## 🔒 安全
 
-判题安全是本项目的核心设计约束，沙箱完全自研（明确排除了复用 go-judge /
-二开 Hydro / DOMjudge 沙箱的路线）：
+判题安全是本项目的核心设计约束。沙箱完全自研（明确排除复用 go-judge /
+二开 Hydro / DOMjudge 沙箱的路线），纵深防线：namespaces 隔离、只读根、
+敏感路径 tmpfs 遮盖、uid 65534 降权、cgroup v2 三重资源限制、rlimit、
+wall-clock 看门狗、seccomp cBPF 白名单（默认 SIGKILL），网络命名空间内无网络。
 
-- **纵深防线**：namespaces 隔离 + 只读根 + 敏感路径 tmpfs 遮盖 + uid 65534 降权
-  + cgroup v2 三重资源限制 + rlimit + wall-clock 看门狗 + seccomp cBPF 白名单
-  （默认 SIGKILL），网络命名空间内无网络
-- **逃逸测试集**：读诱饵文件、/proc 探测、路径穿越、写宿主、联网、fork 炸弹、
-  内存炸弹、seccomp 违规——全部作为判题机上的常规测试资产运行；
-  cBPF 程序另有逐条解释器穷举测试（0..459 全部非法系统调用号验证）
-- **限流体系**：登录 10 次/分/IP、注册 5 次/分/IP、提交 15 次/分/用户，
-  写端点 per-user 滑窗限流，公开 API 独立限流桶；TrustedProxies 固定，
-  客户端伪造 XFF 不影响限流口径
-- **安全响应头**：nosniff / X-Frame-Options / CSP / Referrer-Policy，后端与 nginx 双层
-- **攻击面收敛**：API/gRPC 端口不对网外发布（compose `expose` / systemd 绑 127.0.0.1）、
-  防火墙默认拒绝入站（仅 22/80/443）、WS token 不落访问日志、zip 上传白名单重编号
-- **公平性红线**：完整判题测试数据（.in/.out 全集）永不通过公开 API 暴露
+沙箱逃逸测试集（读诱饵文件、/proc 探测、路径穿越、写宿主、联网、fork
+炸弹等）作为判题机常规测试资产运行；cBPF 程序另有逐条解释器穷举测试。
+**完整判题测试数据永不通过公开 API 暴露**——公平性红线。
 
-完整审计过程、沙箱逃逸面专项与接受的残余风险见
-**[docs/archive/security-audit.md](docs/archive/security-audit.md)**。
+审计过程与残余风险见 [docs/archive/security-audit.md](docs/archive/security-audit.md)。
 
-## API
+## 🤝 贡献
 
-面向机器人、数据看板、CLI/IDE 工具的只读公开 API：
-**[docs/reference/api.md](docs/reference/api.md)**。
+欢迎 Issue 与 PR，流程与规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-亮点：`GET /api/v1/public/problems/:id/cph` 直接返回 cph（VSCode Competitive
-Programming Helper）可导入的题目 JSON——配合本地 Competitive Companion 回推，
-可以做到「在 cph 里粘个题号就建好题」；判题完成还有 webhook 回调
-（插件系统），QQ 机器人等第三方挂一个 URL 即可接入。
+## 📄 License
 
-## 贡献
-
-欢迎 Issue 与 PR，贡献流程与规范见 **[CONTRIBUTING.md](CONTRIBUTING.md)**。
-
-## License
-
-本项目以 **MIT** 协议开源，见 [LICENSE](LICENSE)。
+[MIT](LICENSE) © Asanagl
