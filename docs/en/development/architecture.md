@@ -162,7 +162,9 @@ Every run re-executes itself inside a **fresh set of namespaces**
   kills the whole tree).
 - **Syscalls**: seccomp cBPF allowlist, default SIGKILL. No socket family,
   ptrace, mount, unshare, setuid family; the compile profile additionally
-  allows fork/vfork.
+  allows fork/vfork. (cBPF is the only format seccomp accepts; the kernel
+  translates it to internal eBPF + JIT — why not eBPF: see
+  `judge-sandbox.md` §2.5.)
 - **Interactive problems**: the user program and the interactor each run in
   their own sandbox, talking through parent-brokered pipes; either exiting
   terminates the other; the interactor convention is exit 0 = AC / 1 = WA /

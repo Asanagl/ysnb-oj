@@ -161,6 +161,22 @@ CGO_ENABLED=0 GOOS=linux go test -c -o sandbox.test ./pkg/sandbox/
 # 推到判题机后：./sandbox.test -test.v
 ```
 
+**为什么是 cBPF 而不是 eBPF（想"升级过滤器"前必读）**：
+
+- seccomp 的内核接口**只接受经典 BPF**：`PR_SET_SECCOMP(SECCOMP_MODE_FILTER)`
+  加载的就是 cBPF 指令数组（`sock_fprog`），内核不存在"eBPF seccomp"
+  模式——社区多次提案均未合入主线。Docker / isolate / bubblewrap 等
+  主流沙箱同样走 cBPF。
+- "cBPF 过时、eBPF 更快"在这个场景不成立：内核自 3.18 起把所有加载的
+  cBPF（含 seccomp 过滤器）**内部自动翻译成 eBPF 指令并 JIT 成机器码**。
+  生产机实测 `net.core.bpf_jit_enable = 1`（Debian 11 / kernel 5.10）——
+  执行期跑的本来就是 JIT 后的 eBPF，cBPF 只是加载格式；过滤开销纳秒级，
+  "换 eBPF"拿不到任何性能或安全收益。
+- 唯一的真 eBPF 替代是 **BPF LSM**（挂 LSM 钩子的 eBPF 程序）：需要
+  root + 内核 `CONFIG_BPF_LSM` + `lsm=bpf` 启动参数，策略是**宿主机全局**
+  的，会失去"每进程 fail-closed 白名单"语义，复杂度高一个量级——对
+  OJ 沙箱不适用。过滤器演进在本节约束内进行即可。
+
 ### 2.6 沙箱故障定位方法
 
 先用 `journalctl -u oj-api` 找 `submission judged` 锚点行定位到具体提交
