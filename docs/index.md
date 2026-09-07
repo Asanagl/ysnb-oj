@@ -55,6 +55,7 @@ features:
 | [架构总览](./development/architecture) | 技术决策、模块边界、判题数据流、沙箱安全模型、赛制 |
 | [技术栈与配置](./development/tech-stack) | 依赖版本、包结构、OJ_* 配置速查、限流参数 |
 | [判题机与沙箱](./development/judge-sandbox) | gRPC 协议、判题管线、languages.yaml、seccomp/cgroup 深水区 |
+| [BPF LSM 试点](./development/bpf-lsm-pilot) | 未实施的规划页：审计模式试点运行手册与拦截决策门槛 |
 | [项目展示](./development/showcase) | 脱敏版技术总结（面试/对外） |
 
 ### API 参考

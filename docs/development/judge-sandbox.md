@@ -174,8 +174,9 @@ CGO_ENABLED=0 GOOS=linux go test -c -o sandbox.test ./pkg/sandbox/
   "换 eBPF"拿不到任何性能或安全收益。
 - 唯一的真 eBPF 替代是 **BPF LSM**（挂 LSM 钩子的 eBPF 程序）：需要
   root + 内核 `CONFIG_BPF_LSM` + `lsm=bpf` 启动参数，策略是**宿主机全局**
-  的，会失去"每进程 fail-closed 白名单"语义，复杂度高一个量级——对
-  OJ 沙箱不适用。过滤器演进在本节约束内进行即可。
+  的，会失去"每进程 fail-closed 白名单"语义，复杂度高一个量级——经评估
+  （2026-09）**不作为判题强制层**；未来在支持内核上以审计模式（只记录、
+  永不拦截）试点的规划见 `bpf-lsm-pilot.md`。过滤器演进在本节约束内进行。
 
 ### 2.6 沙箱故障定位方法
 

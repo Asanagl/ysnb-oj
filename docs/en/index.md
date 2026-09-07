@@ -55,6 +55,7 @@ features:
 | [Architecture](./development/architecture) | Key decisions, module boundaries, judging data flow, sandbox security model, contest modes |
 | [Stack & config](./development/tech-stack) | Dependency versions, package layout, OJ_* config quick reference, rate-limit parameters |
 | [Judge & sandbox](./development/judge-sandbox) | gRPC protocol, judging pipeline, languages.yaml, seccomp/cgroup deep dive |
+| [BPF LSM pilot](./development/bpf-lsm-pilot) | Planned, not implemented: audit-mode pilot runbook and the enforcement decision gate |
 | [Showcase](./development/showcase) | Sanitized technical retrospective (interviews / external audiences) |
 
 ### API reference
