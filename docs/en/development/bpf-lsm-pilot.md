@@ -1,14 +1,16 @@
-# BPF LSM Audit Pilot Runbook (not implemented)
+# BPF LSM Audit Pilot Runbook
 
-> Status: **planned, not yet implemented**. Decision record (2026-09-06):
-> BPF LSM is NOT adopted as a judging enforcement layer — see
-> [judge-sandbox.md](judge-sandbox.md) §2.5 (host-wide policy vs per-process
-> fail-closed, activation requires a reboot, overlaps the existing four
-> defense layers). Instead: once the kernel is upgraded to a version where
-> the `bpf` LSM can be activated (e.g. Debian 12 / 6.1), pilot it in an
-> **isolated environment** in **audit mode** (log-only, never blocks), then
-> decide on enforcement based on observed judge-workload behavior. This
-> document is the runbook for that future work.
+> Status: **audit-mode pilot is LIVE** (production judge, since
+> 2026-09-08; the "isolated environment" gate was waived with the owner's
+> approval since audit mode has zero blast radius by construction). Debian
+> 12 activates the `bpf` LSM by default — no reboot was needed; the three
+> hooks (`socket_create` / `bprm_check_security` / `ptrace_access_check`)
+> are attached with a judge-cgroup allowlist filter, judging verified AC,
+> negative control shows zero events, and the detach/rollback drill
+> passed. Tools and deployment: `deploy/lsm-audit/`. Observation period
+> ≥ 2 weeks (until 2026-09-22), then §4 decides on enforcement. Original
+> decision record (2026-09-06): not adopted as an enforcement layer — see
+> [judge-sandbox.md](judge-sandbox.md) §2.5.
 
 ## 1. Preconditions (all met on an isolated machine, never production)
 
@@ -52,6 +54,15 @@
 - Rollback must always be available: `bpftool prog detach` fully reverts.
 
 ## 5. Implementation steps (future work order)
+
+> Actual implementation (2026-09-08) deviated from the original plan:
+> 1) Debian 12 activates the `bpf` LSM by default, so step 2 was free;
+> 2) the first iteration uses a libbpf C loader (bpftool CLI cannot attach
+> LSM programs) + a shell watcher + `trace_pipe` observation — the
+> Go/cilium-ebpf daemon is left for formalization; 3) measured event flow:
+> one C++ submission emits 3 exec events (the compile chain), zero events
+> from non-judge processes. Sources and deployment steps:
+> `deploy/lsm-audit/README.md`.
 
 1. Install the target distro + full judge toolchain on the isolated machine.
 2. Activate the `bpf` LSM, reboot, verify via `/sys/kernel/security/lsm`.
