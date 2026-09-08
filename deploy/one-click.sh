@@ -62,7 +62,14 @@ if [ -x /opt/oj/oj-judge ]; then
   /opt/oj/oj-judge --selftest || {
     echo "selftest failed — check cgroup v2 and toolchain (docs/operations/deploy.md 第三节)"; exit 1; }
   if [ -f /etc/systemd/system/oj-judge.service ]; then
-    systemctl enable --now oj-judge && echo "oj-judge service enabled"
+    # Debian 12 (systemd 252) enables root cgroup controllers lazily during
+    # boot; without this drop-in an early-boot judge start silently loses
+    # cpu.max and every submission lands SE.
+    mkdir -p /etc/systemd/system/oj-judge.service.d
+    install -m 644 deploy/systemd/oj-judge-cgroup.conf \
+      /etc/systemd/system/oj-judge.service.d/cgroup-cpu.conf
+    systemctl daemon-reload
+    systemctl enable --now oj-judge && echo "oj-judge service enabled (cgroup drop-in installed)"
   else
     echo "oj-judge binary OK; unit file missing — install deploy/systemd/oj-judge.service"
   fi
@@ -70,8 +77,9 @@ else
   echo "oj-judge not installed on this host (expected: judge runs bare-metal, not in compose)."
   echo "  1) copy dist/oj-judge-linux -> /opt/oj/oj-judge && chmod +x"
   echo "  2) /opt/oj/oj-judge.env: OJ_API_ENDPOINT=127.0.0.1:9090 OJ_FETCH_BASE=http://127.0.0.1:8080"
-  echo "     OJ_DAEMON_TOKEN=<.env 的 OJ_DAEMON_SECRET> OJ_MAX_PARALLEL=1 OJ_WORK_ROOT=/oj-work"
+  echo "     OJ_DAEMON_TOKEN=<.env 的 OJ_DAEMON_SECRET，用 grep '^OJ_DAEMON_SECRET=' .env 取完整行> OJ_MAX_PARALLEL=1 OJ_WORK_ROOT=/oj-work"
   echo "  3) /opt/oj/oj-judge --selftest 通过后: cp deploy/systemd/oj-judge.service /etc/systemd/system/"
+  echo "     mkdir -p /etc/systemd/system/oj-judge.service.d && cp deploy/systemd/oj-judge-cgroup.conf /etc/systemd/system/oj-judge.service.d/cgroup-cpu.conf"
   echo "     systemctl daemon-reload && systemctl enable --now oj-judge"
   echo "（不装判题机也可继续：Web/API/题库已可用，仅提交会停在 PENDING）"
 fi
@@ -92,13 +100,13 @@ code=$(curl -s -o /dev/null -m 5 -w "%{http_code}" http://127.0.0.1/ || true)
 echo
 echo "===== deployment complete ====="
 echo "URL: http://<server-ip>/"
-echo "admin user: $(grep '^OJ_ADMIN_USERNAME=' .env | cut -d= -f2)"
-echo "admin pass: $(grep '^OJ_ADMIN_PASSWORD=' .env | cut -d= -f2)   <- record it now"
+echo "admin user: $(grep '^OJ_ADMIN_USERNAME=' .env | head -1 | cut -d= -f2-)"
+echo "admin pass: $(grep '^OJ_ADMIN_PASSWORD=' .env | head -1 | cut -d= -f2-)   <- record it now"
 echo "first invite code: log into admin console -> 用户管理 -> 邀请码 -> 生成"
 echo
 echo "services: postgres/redis/api in compose + web(nginx, host network); judge runs on the HOST (systemd)."
 echo "maintenance CLI (create/recover super admin, doctor…):"
-echo "  docker compose exec api oj-cli --token \$(grep '^OJ_CLI_TOKEN=' .env | cut -d= -f2) <子命令>"
+echo "  docker compose exec api oj-cli --token \$(grep '^OJ_CLI_TOKEN=' .env | head -1 | cut -d= -f2-) <子命令>"
 echo "  子命令: create-superadmin / reset-password / set-role / users / invite / doctor"
 
 # 开发群二维码（内容为固定的加群链接，此处为预生成的终端 ANSI QR）
