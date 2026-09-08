@@ -33,12 +33,21 @@ func (s *Sandbox) Preflight() error {
 	// enabled in CgroupBase's subtree_control. Delegated setups (systemd)
 	// usually leave it empty — enable what we need, best-effort per
 	// controller so a kernel without one still passes for the rest.
-	for _, ctrl := range []string{"memory", "pids"} {
-		cur, err := os.ReadFile(filepath.Join(s.CgroupBase, "cgroup.subtree_control"))
-		if err == nil && strings.Contains(string(cur), ctrl) {
-			continue
+	// cpu must be in the list too: applyLimits always writes cpu.max.
+	//
+	// why retry: Debian 12 (systemd 252) enables controllers in the root
+	// cgroup lazily during boot — a unit starting early gets EACCES on
+	// this write even though root enables everything seconds later
+	// (seen as all-judging-SE after the bullseye→bookworm upgrade).
+	for _, ctrl := range []string{"memory", "pids", "cpu"} {
+		enabled := func() bool {
+			cur, err := os.ReadFile(filepath.Join(s.CgroupBase, "cgroup.subtree_control"))
+			return err == nil && strings.Contains(string(cur), ctrl)
 		}
-		_ = os.WriteFile(filepath.Join(s.CgroupBase, "cgroup.subtree_control"), []byte(" "+ctrl), 0o644)
+		for attempt := 0; attempt < 20 && !enabled(); attempt++ {
+			_ = os.WriteFile(filepath.Join(s.CgroupBase, "cgroup.subtree_control"), []byte(" "+ctrl), 0o644)
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
 	probe := filepath.Join(s.CgroupBase, "preflight-"+uuid.NewString()[:8])
 	if err := os.MkdirAll(probe, 0o755); err != nil {

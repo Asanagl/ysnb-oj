@@ -225,7 +225,11 @@ CGO_ENABLED=0 GOOS=linux go test -c -o sandbox.test ./pkg/sandbox/
    controller 文件只在**父组 subtree_control 启用了对应 controller** 时
    才可写，Preflight 现在会幂等地启用 memory/pids/cpu（本机还发现
    nsdelegate 挂载选项下，给代理子组启 controller 会触发内核
-   mem_cgroup_css_alloc 挂死——测试直接用生产 base）；(c) stage2
+   mem_cgroup_css_alloc 挂死——测试直接用生产 base）。Debian 12
+   （systemd 252）还有一层：根组控制器是开机过程**惰性启用**的，开机
+   早期启动的 judge 写 base 的 subtree_control 会 EACCES 且静默失败
+   （bullseye→bookworm 原地升级后真实踩到：判题全 SE），故 Preflight
+   的启用写入带重试与生效校验；(c) stage2
    （Go supervisor）和选手程序同 cgroup，memory.max 要加 64MB headroom，
    否则并发下内核先杀 supervisor。
 5. **并发预算 = 主机内存，不是凭感觉**。每次沙箱运行 = Go supervisor +
