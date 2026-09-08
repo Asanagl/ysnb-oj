@@ -137,6 +137,10 @@ OJ_LOG_LEVEL=info
 
 ```bash
 cp deploy/systemd/oj-api.service deploy/systemd/oj-judge.service /etc/systemd/system/
+# Debian 12 必装（systemd 252 开机惰性启用根组控制器，缺它则早启动的判题机
+# 全部提交 SE；Debian 11 无害幂等）：
+mkdir -p /etc/systemd/system/oj-judge.service.d
+cp deploy/systemd/oj-judge-cgroup.conf /etc/systemd/system/oj-judge.service.d/cgroup-cpu.conf
 systemctl daemon-reload
 systemctl enable --now oj-api oj-judge
 ```
@@ -187,7 +191,7 @@ nginx -t && systemctl reload nginx
 
 3. API 机放行：gRPC 9090 与测试数据下载 8080 需对该判题机的**内网 IP** 开白名单（防火墙层面，勿对公网开放）。裸机路线 oj-api 默认监听全接口，用 ufw/iptables 收敛；compose 路线 api 只回环发布（`127.0.0.1:8080/9090`），跨机判题机需把发布地址改为内网 IP（`ports: ["<内网IP>:9090:9090", ...]`）并同样防火墙收敛。
 4. **必跑自验**：`/opt/oj/oj-judge --selftest`（期望输出见第二节路径 B）。
-5. 只装判题单元：`cp deploy/systemd/oj-judge.service /etc/systemd/system/` → `systemctl daemon-reload && systemctl enable --now oj-judge`。
+5. 只装判题单元：`cp deploy/systemd/oj-judge.service /etc/systemd/system/` → 装 cgroup drop-in（同上，Debian 12 必装）→ `systemctl daemon-reload && systemctl enable --now oj-judge`。
 
 验证：后台「判题机监控」出现 judge-2 且 online；提交一道 A+B 能出 AC/WA 而不是一直 PENDING。判题机一直 offline 的高频原因是 `OJ_DAEMON_TOKEN` 与 API 端 `OJ_DAEMON_SECRET` 不一致。
 
