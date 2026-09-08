@@ -12,7 +12,9 @@ command -v docker >/dev/null || {
   exit 1
 }
 [ -f frontend/dist/index.html ] || {
-  echo "frontend/dist missing — on a dev box run: cd frontend && npm ci && npm run build, then sync dist here"
+  echo "frontend/dist missing — either:"
+  echo "  a) download frontend-dist.tar.gz from the GitHub release and: tar xzf frontend-dist.tar.gz -C frontend"
+  echo "  b) on a dev box run: cd frontend && npm ci && npm run build, then sync dist here"
   exit 1
 }
 [ "$(stat -fc %T /sys/fs/cgroup)" = "cgroup2fs" ] || {

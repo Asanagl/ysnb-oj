@@ -8,7 +8,7 @@
 
 - **操作系统**：后端 Linux-only（沙箱依赖 cgroup v2 与 namespaces），Windows / macOS 不受支持。建议 Ubuntu 22.04+ / Debian 12+；生产实测 Debian 11 也在稳定运行（seccomp KILL_PROCESS 需内核 ≥ 4.14，更老的内核会自动降级）。
 - **cgroup v2**（判题硬依赖），先验证：`stat -fc %T /sys/fs/cgroup` 必须输出 `cgroup2fs`。
-- **前端产物在开发机构建**，随仓库同步到服务器；**服务器上禁止 npm / go 构建**（小内存机会 OOM）：`cd frontend && npm ci && npm run build`。
+- **前端产物在开发机构建**，随仓库同步到服务器；**服务器上禁止 npm / go 构建**（小内存机会 OOM）：`cd frontend && npm ci && npm run build`。不想本地构建可直接用 GitHub Release 附带的 `frontend-dist.tar.gz`（解压到 `frontend/`）。
 - **端口红线**：8080（API HTTP）与 9090（API gRPC）只允许 127.0.0.1（或 compose 内网）可达，公网只暴露 nginx 的 80（及将来可选的 443）。Compose 路线把 api 端口回环发布到 `127.0.0.1:8080/9090`（宿主判题机与探活消费）；裸机路线用防火墙兜底。
 - 路径选择：**A. Docker Compose 一键**（大多数场景，`deploy/one-click.sh`）或 **B. 裸机 + systemd**（不想装 Docker 的校内服务器）。
 
@@ -18,7 +18,7 @@
 
 ### 路径 A：Docker Compose 一键部署（推荐）
 
-前置：① Docker ≥ 24（`apt install docker.io docker-compose-plugin` 或按官方文档）；② 开发机构建的 `frontend/dist` 已随仓库同步；③ root shell 且 cgroup v2 已启用。然后在仓库根目录：
+前置：① Docker ≥ 24（`apt install docker.io docker-compose-plugin` 或按官方文档）；② `frontend/dist` 已随仓库同步（开发机构建，或直接用 GitHub Release 附带的 `frontend-dist.tar.gz` 解压到 `frontend/`）；③ root shell 且 cgroup v2 已启用。然后在仓库根目录：
 
 ```bash
 bash deploy/one-click.sh
@@ -75,7 +75,7 @@ mkdir -p /opt/oj/data /opt/oj/web /opt/oj/backup
 
 验证：`runuser -u postgres -- psql -d oj -c 'select 1'` 返回一行。
 
-**3. 部署二进制与前端**（产物在仓库 `dist/` 与 `frontend/dist/`，开发机构建，服务器上不跑 go/npm）：
+**3. 部署二进制与前端**（产物在仓库 `dist/` 与 `frontend/dist/`，开发机构建；二者也随 [Release](https://github.com/Asanagl/ysnb-oj/releases) 附带，下载同名文件即可。服务器上不跑 go/npm）：
 
 ```bash
 cp dist/oj-api-linux   /opt/oj/oj-api
