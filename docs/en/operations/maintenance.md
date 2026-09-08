@@ -19,16 +19,22 @@
 
 | Item | Value |
 |---|---|
-| Host | `<your-server-ip>`, Debian 11 single box, 3.9 GB RAM |
-| Services | `oj-api` (user oj; HTTP :8080 / gRPC :9090, loopback only), `oj-judge` (root), nginx (:80/:443), postgresql, redis-server |
+| Host | `<your-server-ip>`, Debian 12 (bookworm) single box, kernel 6.1, 3.9 GB RAM |
+| Services | Docker Compose: postgres / redis / api / web (`restart: unless-stopped`, start with the host); api published on loopback 127.0.0.1:8080/9090 only, web on host network :80. Host side: `oj-judge` (root, gRPC to api) + optional `oj-audit` / `oj-audit-watcher` (BPF LSM audit layer, log-only, see `deploy/lsm-audit/`) |
 | Firewall | ufw: default deny incoming, only 22/80/443 allowed |
-| Binaries | `/opt/oj/oj-api`, `/opt/oj/oj-judge`, maintenance CLI `/opt/oj/oj-cli` |
-| Config | `/opt/oj/oj.env`, `/opt/oj/oj-judge.env` (mode 600; restart the service to apply) |
-| Frontend | `/opt/oj/web` (nginx static root; each release keeps the previous one as `/opt/oj/web.old`) |
-| Data | `/opt/oj/data` (testdata etc., the original asset); judge workspace `/oj-work`; blob cache `/opt/oj/data/judge-cache` |
+| Binaries | `/opt/oj/oj-judge`; api lives inside the compose image — maintenance CLI via `docker compose exec api oj-cli ...` |
+| Config | `/root/ysnb-oj/.env` (all compose secrets), `/opt/oj/oj-judge.env` (mode 600; restart the service to apply) |
+| Frontend | compose web container (nginx:1.27-alpine) mounting the repo `frontend/dist`; release = sync dist then `docker compose restart web` |
+| Data | docker volumes pgdata (database) / redisdata / ojdata (testdata etc., `/oj-data` in the container); judge workspace `/oj-work` |
 | Backups | `/opt/oj/backup/` (db/ + data/snapshot/ + backup.log + drill.log) |
 | Cron | root crontab: 03:00 daily backup; 04:00 on the 1st, restore drill |
-| Units | `/etc/systemd/system/oj-api.service`, `oj-judge.service` (sources in `deploy/systemd/`) |
+| Units | `/etc/systemd/system/oj-judge.service` + `oj-judge.service.d/cgroup-cpu.conf` (required on Debian 12, see below); optional `oj-audit*.service` (sources in `deploy/systemd/` and `deploy/lsm-audit/`) |
+
+> Debian 12 note: `oj-judge.service.d/cgroup-cpu.conf` enables the
+> memory/pids/cpu controllers on the root cgroup and the judge base
+> before the judge starts (systemd 252 enables root controllers lazily
+> during boot; without it an early-boot judge turns every submission
+> into SE). Harmless and idempotent on Debian 11.
 
 ### SSH hardening baseline (effective 2026-09-04)
 
@@ -79,43 +85,44 @@ Rollback (on the server):
 rm -rf /opt/oj/web && mv /opt/oj/web.old /opt/oj/web
 ```
 
-### Backend release (oj-api / oj-judge binaries)
+### Backend release (api image / oj-judge binary)
 
-Prerequisite (dev machine): Go toolchain; cross-compile the Linux artifacts:
+The api ships as a compose image: after changing `backend/` sources, sync
+them to the server repo and run:
+
+```bash
+cd /root/ysnb-oj && docker compose build api && docker compose up -d api
+```
+
+(Go builds inside the image; expect 5-15 minutes on the 3.9 GB box.
+`restart: unless-stopped` keeps it self-healing across host reboots.)
+
+The judge is a host-side single binary — cross-compile on the dev machine:
 
 ```bash
 cd backend
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/oj-api-linux ./cmd/api
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../dist/oj-judge-linux ./cmd/judge
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/oj-judge-linux ./cmd/judge
 cd ..
-```
-
-Push (dev machine):
-
-```bash
-node remote-test/oj-deploy-binaries.mjs
+node remote-test/oj-push-one-binary.mjs judge
 ```
 
 What it does: gzip+base64 over the key SSH channel → server-side sha256
-verification → lands as `/opt/oj/oj-api.new` and `/opt/oj/oj-judge.new`.
-**The script does not swap or restart**; `PUSH_ALL_OK` only means transfer
-and verification succeeded.
-
-Swap & restart (on the server):
+verification → lands as `/opt/oj/oj-judge.new`. **The script does not swap
+or restart**; `PLACED` only means transfer and verification succeeded.
+Stop the judge before upgrading (systemd holds the old file; overwriting
+fails with Text file busy):
 
 ```bash
-mv -f /opt/oj/oj-api.new /opt/oj/oj-api
+systemctl stop oj-judge
 mv -f /opt/oj/oj-judge.new /opt/oj/oj-judge
-systemctl restart oj-api oj-judge
+systemctl start oj-judge
 ```
-
-The `mv` rename-swap is safe against running processes (the old inode is
-released when the old process exits) — no need to stop services first.
 
 Verify (on the server):
 
 ```bash
-systemctl is-active oj-api oj-judge                                       # both active
+systemctl is-active oj-judge                                              # active
+docker compose ps                                                         # four containers running
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/api/v1/languages   # 200
 journalctl -u oj-judge -n 20 --no-pager                                   # judge reconnected
 ```
@@ -126,13 +133,13 @@ the checks above.
 
 ### Variants (dev machine)
 
-- Push one binary: `node remote-test/oj-push-one-binary.mjs <api|judge>`
-  (also lands as `.new`; swap + restart stay manual on the server).
 - Push small files (env, scripts, config samples):
   `node remote-test/push-small.mjs <local> <server absolute path>`.
-- nginx config: edit `deploy/nginx.conf` in the repo, then
-  `node remote-test/m5-nginx-sync.mjs` (backs up as `oj.bak-sec`; swap and
-  reload only if `nginx -t` passes).
+- Frontend release: `node remote-test/m5-frontend-sync-key.mjs` (sync dist,
+  then `docker compose restart web` on the server).
+- nginx config: the web container mounts the repo `deploy/nginx.conf`; edit
+  it, sync the repo on the server, then `docker compose restart web` (no
+  host nginx).
 
 All scripts use the SSH key channel (default `~/.ssh/id_ed25519`; override
 with `OJ_SSH_KEY` / `OJ_SSH_HOST`). Password login on the server has been
@@ -149,7 +156,7 @@ the admin console).
 
    ```bash
    journalctl -u oj-judge -p err -S -1h --no-pager    # judge errors, last hour
-   journalctl -u oj-api -S today --no-pager | grep "submission judged"
+   docker compose logs api --since 24h 2>&1 | grep "submission judged"
    ```
 
 2. **Find the preserved workspace**. CE/SE/RE workspaces are kept
@@ -182,17 +189,22 @@ workspaces manually (successful ones are auto-deleted).
 On the server:
 
 ```bash
-systemctl is-active oj-api oj-judge nginx postgresql redis-server   # all active
+docker compose ps                               # four containers running
+systemctl is-active docker oj-judge             # all active (plus oj-audit oj-audit-watcher with the audit layer)
 tail -5 /opt/oj/backup/backup.log        # today's 03:00 backup succeeded, dump size sane
 df -h /                                  # disk < 80%
 free -m                                  # 3.9GB box — watch available
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1/api/v1/languages   # 200
-journalctl -u oj-api -u oj-judge -p err -S today --no-pager | tail -20
+docker compose logs api --since 24h 2>&1 | grep "submission judged" | tail -5
+journalctl -u oj-judge -p err -S today --no-pager | tail -20
 ```
 
 In the browser: judge monitor shows judge-1 online with an empty queue;
 after the 1st of the month, `tail /opt/oj/backup/drill.log` ends with
-`drill PASSED`.
+`drill PASSED`. With the audit layer installed also check
+`systemctl is-active oj-audit oj-audit-watcher` and
+`cat /sys/kernel/tracing/trace_pipe | grep -c oj-audit` (grows while
+judging happens).
 
 Pass criterion: everything above normal. Any failure → incident table in
 §9.
@@ -200,41 +212,43 @@ Pass criterion: everything above normal. Any failure → incident table in
 ## 5. Service management & log quick reference
 
 ```bash
-systemctl restart oj-api      # required after changing oj.env
+docker compose restart api    # required after changing .env
 systemctl restart oj-judge    # after changing oj-judge.env / installing compilers
 ```
 
-oj-judge connects to oj-api over gRPC (127.0.0.1:9090): restarting oj-api
-briefly disconnects the judge (WARN `daemon disconnected`) and it reconnects
-automatically; in-flight tasks are reclaimed by the 15-minute lease and
-requeued. Restarting both: **oj-api first, then oj-judge** (restarting both
-at once also self-heals, just with an extra reconnect cycle).
+oj-judge connects to the compose api over gRPC (127.0.0.1:9090): restarting
+the api briefly disconnects the judge (WARN `daemon disconnected`) and it
+reconnects automatically; in-flight tasks are reclaimed by the 15-minute
+lease and requeued. Touching both: **api first, then oj-judge** (restarting
+both at once also self-heals, just with an extra reconnect cycle).
 
-- **Site-wide 502**: oj-api behind nginx died →
-  `journalctl -u oj-api -n 100 --no-pager` (usual causes: broken oj.env edit,
+- **Site-wide 502**: the api behind the web container died →
+  `docker compose logs api --n 100` (usual causes: broken .env edit,
   missing JWT secret failing startup).
 - **`/api/v1/ws` returns 503**: WebSocket connection cap (1024) reached →
-  `systemctl restart oj-api` clears connections; if frequent, look for a
+  `docker compose restart api` clears connections; if frequent, look for a
   connection leak.
 
 ### Log quick reference
 
-- Both processes log structured JSON (logx/slog) → stderr → journald,
-  default level `info`.
-- Without SSH: admin console → 「日志查看器」log viewer reads recent logs of
-  both units with server-side unit/keyword filtering (requires the oj user
-  in `systemd-journal`, already configured; if the viewer 500s, check that
-  first).
+- Both components log structured JSON (logx/slog) → stderr: the judge goes
+  to stderr → journald (readable via journalctl); the compose api goes to
+  container logs (`docker compose logs api`), default level `info`.
+- Without SSH: admin console → 「日志查看器」log viewer reads the judge's
+  journald logs (plus oj-api on the systemd route) with server-side
+  unit/keyword filtering; on the compose route the api logs are viewed
+  with `docker compose logs api` on the server.
 - CLI (on the server):
 
   ```bash
-  journalctl -u oj-api -f                 # API live
+  docker compose logs api -f             # API live
   journalctl -u oj-judge -f               # judge live
   journalctl -u oj-judge -p err -S -1h    # judge errors, last hour
   ```
 
-- Temporary debug: `OJ_LOG_LEVEL=debug` in `/opt/oj/oj.env` or
-  `/opt/oj/oj-judge.env` → restart that service → revert after triage.
+- Temporary debug: api `OJ_LOG_LEVEL=debug` in `.env` then
+  `docker compose up -d api`; judge: in `/opt/oj/oj-judge.env` →
+  restart oj-judge → revert after triage.
 - Disk: journald cap `SystemMaxUse=200M`
   (`/etc/systemd/journald.conf.d/99-oj.conf`); manual shrink with
   `journalctl --vacuum-size=100M`.
@@ -254,8 +268,8 @@ Prerequisite: `df -h /` confirms pressure; locate the big consumer with
 | Backups | `/opt/oj/backup` | `/opt/oj/backup.sh` keeps 14 daily + 6 monthly; if still growing, check `KEEP_DAYS/KEEP_MONTHS` in the script header, then delete expired dumps |
 | journald | `/var/log/journal` | The 200M cap self-enforces; manual `journalctl --vacuum-size=100M` |
 
-Verify: `df -h /` back under 80%; `systemctl is-active oj-api oj-judge nginx`
-all still active.
+Verify: `df -h /` back under 80%; `docker compose ps` four containers and
+`systemctl is-active oj-judge` all still running/active.
 
 ## 7. Restore a backup
 
@@ -276,16 +290,17 @@ window to users.
 
 ```bash
 # 1. Stop services to avoid new writes during the restore
-systemctl stop oj-api oj-judge
-# 2. Restore the database
-systemctl start postgresql
-runuser -u postgres -- dropdb --if-exists oj
-runuser -u postgres -- createdb oj
-runuser -u postgres -- pg_restore -d oj /opt/oj/backup/db/oj-<date>.dump
+docker compose stop api
+systemctl stop oj-judge
+# 2. Restore the database (postgres container in compose)
+docker compose exec postgres psql -U oj -c 'drop database if exists oj'
+docker compose exec postgres psql -U oj -c 'create database oj'
+cat /opt/oj/backup/db/oj-<date>.dump | docker compose exec -T postgres pg_restore -U oj -d oj
 # 3. Restore the data dir (testdata etc.)
 rsync -a /opt/oj/backup/data/snapshot/ /opt/oj/data/
 # 4. Start services
-systemctl start oj-api oj-judge
+docker compose start api
+systemctl start oj-judge
 ```
 
 Verify: `curl -s http://127.0.0.1:8080/api/v1/languages` returns 200; admin
@@ -313,8 +328,9 @@ Values live in local `.zcode` records and
 ### Admin app password (on the server)
 
 ```bash
-T=$(grep '^OJ_CLI_TOKEN=' /opt/oj/oj.env | cut -d= -f2-)
-/opt/oj/oj-cli create-superadmin --username <admin account> --password '<new password>' --token "$T"
+cd /root/ysnb-oj
+T=$(grep '^OJ_CLI_TOKEN=' .env | head -1 | cut -d= -f2-)
+docker compose exec api oj-cli create-superadmin --username <admin account> --password '<new password>' --token "$T"
 ```
 
 On an existing user this means promote + reset + unban — also the
@@ -324,16 +340,17 @@ self-recovery path for a locked-out super admin, see
 ### Database oj role password (on the server)
 
 ```bash
-runuser -u postgres -- psql -c "ALTER ROLE oj PASSWORD '<new password>'"
-# update password= inside OJ_DB_DSN in /opt/oj/oj.env
-systemctl restart oj-api
+docker compose exec postgres psql -U oj -c "ALTER ROLE oj PASSWORD '<new password>'"
+# update OJ_PG_PASSWORD in .env, then
+cd /root/ysnb-oj && docker compose up -d api   # recreate the api container with the new password
 ```
 
 ### JWT / judge secrets (on the server)
 
-`OJ_JWT_SECRET` and `OJ_DAEMON_SECRET` in `/opt/oj/oj.env`;
+`OJ_JWT_SECRET` and `OJ_DAEMON_SECRET` in `/root/ysnb-oj/.env`;
 `OJ_DAEMON_TOKEN` in `/opt/oj/oj-judge.env` must equal `OJ_DAEMON_SECRET`.
-Change both sides together, then `systemctl restart oj-api oj-judge`. Note:
+After editing .env run `docker compose up -d api`; change both sides
+together, then `systemctl restart oj-judge`. Note:
 rotating JWT invalidates every login session immediately; mismatched daemon
 secrets take the judge offline instantly.
 
@@ -348,20 +365,22 @@ the new password.
 | One language all CE | Missing compiler on the judge: `apt install openjdk-17-jdk-headless` etc., then `systemctl restart oj-judge` |
 | One language all SE/RE, empty stderr | Sandbox seccomp kill: `journalctl -u oj-judge \| grep SIGSYS`, locate via strace per [judge-sandbox.md](../development/judge-sandbox.md) |
 | Submission stuck JUDGING | The 15-minute lease reclaims and requeues it; or `systemctl restart oj-judge` triggers reconnect + reclaim |
-| Site-wide 502 | oj-api dead: `journalctl -u oj-api -n 100` (usual: broken oj.env, missing JWT secret failing startup) |
-| WS 503 | Connection cap 1024 hit: `systemctl restart oj-api` (§5) |
-| Database unreachable | PG down or role password ≠ DSN: `runuser -u postgres -- psql -d oj -c 'select 1'` |
+| Site-wide 502 | compose api dead: `docker compose logs api --n 100` (usual: broken .env, missing JWT secret failing startup) |
+| WS 503 | Connection cap 1024 hit: `docker compose restart api` (§5) |
+| Database unreachable | postgres container down or password ≠ DSN: `docker compose exec postgres psql -U oj -d oj -c 'select 1'` |
 | Super admin password lost/locked | oj-cli self-recovery, §8 |
-| Disk full | Clean per §6; **never** delete `/opt/oj/data/testdata` |
+| Containers missing after a reboot | Check `docker compose ps` and `restart: unless-stopped` (built in since PR #12); `docker compose up -d` to start manually |
+| Judge all-SE after a reboot | Debian 12 lazy root controller enabling was skipped: confirm `oj-judge.service.d/cgroup-cpu.conf` is in place (§1), `systemctl restart oj-judge` |
+| Disk full | Clean per §6; **never** delete the testdata itself (inside the ojdata volume) |
 | Server OOM / mysteriously slow | 3.9 GB box: confirm nobody is running npm/go builds on it (two incidents); keep `OJ_MAX_PARALLEL` at 1 |
-| Suspected intrusion | `last -f /var/log/wtmp`, `ss -tnp`, check nginx access logs for odd IPs; full rotation per §8 |
+| Suspected intrusion | `last -f /var/log/wtmp`, `ss -tnp`, check the web container access logs for odd IPs; full rotation per §8 |
 
 ## 10. Periodic maintenance
 
 | Cadence | Task |
 |---|---|
 | Daily (auto) | 03:00 backup (cron); glance at `backup.log` during patrols |
-| Weekly | §4 patrol + `apt update && apt upgrade` (stop oj-api/oj-judge before rebooting) |
+| Weekly | §4 patrol + `apt update && apt upgrade`; after a reboot walk the §4 patrol once (compose and oj-judge both auto-start) |
 | Monthly | `drill.log` ends with `drill PASSED`; walk one backup through a full restore drill |
 | Quarterly | Assess disk growth (testdata/backups); consider a second judge (judge-sandbox.md) |
 | Staff changes | Full rotation per §8: SSH keys, admin, DB, JWT/daemon secrets; update the handover doc |
@@ -371,11 +390,12 @@ the new password.
 | What | Where | Applied by |
 |---|---|---|
 | Parallel judge slots | `OJ_MAX_PARALLEL` in `/opt/oj/oj-judge.env` (production = 1, careful raising on 3.9 GB) | restart oj-judge |
-| Log level | `OJ_LOG_LEVEL` in `/opt/oj/oj.env` / `oj-judge.env` | restart that service |
-| Session lifetime | `OJ_JWT_EXPIRE_HOURS` in `/opt/oj/oj.env` | restart oj-api |
+| Log level | api: `OJ_LOG_LEVEL` in `.env` then `docker compose up -d api`; judge: `OJ_LOG_LEVEL` in `oj-judge.env` | recreate api container / restart oj-judge |
+| Session lifetime | `OJ_JWT_EXPIRE_HOURS` in `.env` | `docker compose up -d api` |
 | journald disk cap | `SystemMaxUse` in `/etc/systemd/journald.conf.d/99-oj.conf` | restart systemd-journald |
 | Backup retention | `KEEP_DAYS/KEEP_MONTHS` in `/opt/oj/backup.sh` header | next backup |
-| nginx | source file `deploy/nginx.conf` (sync per §2), or edit `/etc/nginx/sites-available/oj` on the server | `nginx -t && systemctl reload nginx` |
+| nginx | source file `deploy/nginx.conf` (mounted by the web container); sync the repo on the server | `docker compose restart web` |
 | SSH policy | `/etc/ssh/sshd_config.d/00-oj-hardening.conf` | `sshd -t && systemctl reload ssh` |
 | Time multipliers / memory / new language | `backend/pkg/judge/languages.yaml` + toolchain on the judge | ship a new oj-judge binary (§2) |
-| Rate limits | `backend/internal/handler/middleware.go` (login/register), `submissions.go` (submit) | ship a new oj-api binary (§2) |
+| Rate limits | `backend/internal/handler/middleware.go` (login/register), `submissions.go` (submit) | rebuild the api image (§2) |
+| Audit hook set / allowlist logic | `deploy/lsm-audit/oj_audit.bpf.c` | recompile the loader on the target machine (see that directory's README) |
