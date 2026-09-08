@@ -1,0 +1,12 @@
+[Unit]
+Description=YSNB OJ BPF LSM audit loader (audit-only, never blocks)
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/oj/lsm-audit
+ExecStart=/opt/oj/lsm-audit/oj-audit-loader
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
