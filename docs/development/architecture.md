@@ -138,7 +138,9 @@ frontend/src/
   RLIMIT: FSIZE（输出封顶）、STACK、AS（按语言可关，JVM 场景靠 cgroup）、
   CPU（秒级兜底）+ wall-clock 看门狗（杀 PID1 = 灭全树）。
 - **系统调用**：seccomp cBPF 白名单，默认 SIGKILL。禁止 socket 系、ptrace、
-  mount、unshare、setuid 系等；编译档位额外放行 fork/vfork。
+  mount、unshare、setuid 系等；编译档位额外放行 fork/vfork。（cBPF 是
+  seccomp 唯一接受的格式，内核内部已自动转 eBPF + JIT——为什么不用
+  eBPF 见 `judge-sandbox.md` §2.5）
 - **交互题**：用户程序与 interactor 各自沙箱，经父进程搭桥的双向管道通信；
   任一方退出即终止对方；interactor 约定 exit 0=AC / 1=WA / 其余=SE。
 

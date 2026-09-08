@@ -12,6 +12,11 @@ import (
 // bpfInstruction and sockFprog mirror the kernel ABI structs
 // (linux/filter.h: sock_filter, sock_fprog) because x/sys/unix does not
 // export them for Linux; field order/sizes are part of the syscall contract.
+//
+// The ABI here is classic BPF by kernel constraint: seccomp accepts no
+// other filter format, and the kernel itself translates loaded cBPF to
+// internal eBPF + JIT — an "eBPF upgrade" is not a possible change
+// (docs/development/judge-sandbox.md §2.5).
 type bpfInstruction struct {
 	Code uint16
 	Jt   uint8

@@ -187,6 +187,29 @@ CGO_ENABLED=0 GOOS=linux go test -c -o sandbox.test ./pkg/sandbox/
 # after pushing to the judge: ./sandbox.test -test.v
 ```
 
+**Why classic BPF instead of eBPF (read before "upgrading" the filter)**:
+
+- The seccomp kernel interface **only accepts classic BPF**:
+  `PR_SET_SECCOMP(SECCOMP_MODE_FILTER)` loads a cBPF instruction array
+  (`sock_fprog`); there is no "eBPF seccomp" mode in the kernel — repeated
+  upstream proposals were never merged. Docker / isolate / bubblewrap run
+  on the same cBPF path.
+- "cBPF is legacy, eBPF is faster" does not hold here: since kernel 3.18,
+  every loaded cBPF program (including seccomp filters) is **transparently
+  translated into internal eBPF and JIT-compiled**. Verified on the
+  production host: `net.core.bpf_jit_enable = 1` (Debian 11 / kernel 5.10)
+  — what executes is already JIT'd eBPF; cBPF is only the load format.
+  Filter overhead is nanoseconds; "switching to eBPF" buys nothing in
+  performance or security.
+- The only true-eBPF alternative is **BPF LSM** (eBPF programs on LSM
+  hooks): it needs root + `CONFIG_BPF_LSM` + the `lsm=bpf` boot parameter,
+  its policy is **host-wide**, losing the per-process fail-closed allowlist
+  semantics, and it is an order of magnitude more complex — evaluated and
+  **not adopted as an enforcement layer** (2026-09); the plan for a future
+  audit-mode pilot (log-only, never blocks) on a supporting kernel is
+  sketched in `bpf-lsm-pilot.md`. Evolve the filter within this section's
+  constraints.
+
 ### 2.6 Sandbox triage method
 
 Start with `journalctl -u oj-api` to find the `submission judged` anchor for
