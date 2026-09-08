@@ -1,0 +1,55 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build judge & api binaries (linux/amd64)
+        working-directory: backend
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/oj-judge-linux-amd64 ./cmd/judge
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../dist/oj-api-linux-amd64 ./cmd/api
+
+      - name: Build frontend dist
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Pack artifacts + checksums
+        run: |
+          tar -czf frontend-dist.tar.gz -C frontend dist
+          sha256sum dist/oj-judge-linux-amd64 dist/oj-api-linux-amd64 frontend-dist.tar.gz > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/oj-judge-linux-amd64 \
+            dist/oj-api-linux-amd64 \
+            frontend-dist.tar.gz \
+            sha256sums.txt \
+            --title "$GITHUB_REF_NAME" --generate-notes
