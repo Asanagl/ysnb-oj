@@ -13,7 +13,7 @@ BACKUP_ROOT=${BACKUP_ROOT:-/opt/oj/backup}
 DATA_DIR=${DATA_DIR:-/opt/oj/data}
 # Docker Compose deployments talk to the "postgres" container; bare-metal
 # (systemd) uses peer auth as the postgres OS user via runuser.
-PG_CONTAINER=${PG_CONTAINER:-oj-postgres}
+PG_CONTAINER=${PG_CONTAINER:-$(docker ps --format "{{.Names}}" 2>/dev/null | grep -i postgres | head -1)}
 PG_USER=${PG_USER:-oj}
 PG_DB=${PG_DB:-oj}
 
