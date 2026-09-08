@@ -26,13 +26,22 @@ gcc -O2 -o oj-audit-loader oj_audit_loader.c -lbpf -lelf -lz
 ## 部署 / 观测 / 回滚
 
 ```bash
-# 部署（单位文件见本文末尾说明，WorkingDirectory=/opt/oj/lsm-audit）
+# 部署（默认装到 /opt/oj/lsm-audit；单元文件见本目录 *.service）
+mkdir -p /opt/oj/lsm-audit
+cp oj-audit-loader oj_audit_watcher.sh /opt/oj/lsm-audit/
+cp oj-audit.service oj-audit-watcher.service /etc/systemd/system/
+systemctl daemon-reload
 systemctl enable --now oj-audit.service oj-audit-watcher.service
 # 观测：判题事件流（只含判题 cgroup 的进程）
 cat /sys/kernel/tracing/trace_pipe | grep oj-audit
 # 回滚（随时、完全、无副作用）
 systemctl disable --now oj-audit.service oj-audit-watcher.service
 ```
+
+> 单元文件的两个坑（实踩）：`After=multi-user.target` + `WantedBy=multi-user.target`
+> 会构成排序环，开机时 systemd 直接删掉 watcher 的启动任务——不要加；
+> watcher 对 loader 用 `Wants=` 而非 `Requires=`，依赖瞬时失败时 watcher
+> 仍要活着重试（map 更新在 map 出现前是无害空转）。
 
 ## 安全模型
 

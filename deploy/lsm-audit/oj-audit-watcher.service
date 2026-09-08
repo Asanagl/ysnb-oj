@@ -1,0 +1,18 @@
+[Unit]
+Description=YSNB OJ BPF LSM audit cgroup watcher
+# why Wants (not Requires) + After: if the loader hits a transient failure
+# at boot, the watcher must still start and keep retrying its map updates
+# (they are no-ops until the map exists) — Requires would cancel this unit
+# whenever the dependency hiccups.
+Wants=oj-audit.service
+After=oj-audit.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/oj/lsm-audit
+ExecStart=/opt/oj/lsm-audit/oj_audit_watcher.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
