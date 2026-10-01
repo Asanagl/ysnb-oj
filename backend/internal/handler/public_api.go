@@ -219,6 +219,29 @@ func (s *Server) publicUserSummary(c *gin.Context) {
 	}
 
 	now := time.Now()
+	// 封榜掩码，语义与站内 maskSubmission 一致：进行中比赛在封榜点
+	// （freezePoint）之后的提交，判定结果与题目 ID 不外泄，比赛结束
+	// 自动解冻。匿名端点没有 jury 概念，不提供站内的 judge_view 豁免。
+	// daily 活动计数保留 —— 与站内个人主页一致，只暴露
+	// "当天有提交"，不含判定与题目信息。
+	frozenAt := map[uint]*time.Time{}
+	frozen := func(sub model.Submission) bool {
+		if sub.ContestID == nil || sub.IsPractice {
+			return false
+		}
+		cid := *sub.ContestID
+		if fp, ok := frozenAt[cid]; ok {
+			return fp != nil && sub.CreatedAt.After(*fp)
+		}
+		contest := &model.Contest{}
+		if err := s.DB.First(contest, cid).Error; err != nil {
+			frozenAt[cid] = nil
+			return false
+		}
+		fp := freezePoint(contest, now)
+		frozenAt[cid] = fp
+		return fp != nil && sub.CreatedAt.After(*fp)
+	}
 	byStatus := map[string]int64{}
 	acProblems := map[uint]bool{}
 	tried := map[uint]bool{}
@@ -227,8 +250,6 @@ func (s *Server) publicUserSummary(c *gin.Context) {
 
 	for i := range subs {
 		sub := subs[i]
-		tried[sub.ProblemID] = true
-		byStatus[sub.Status]++
 		key := sub.CreatedAt.Format("2006-01-02")
 		b, ok := daily[key]
 		if !ok {
@@ -236,6 +257,11 @@ func (s *Server) publicUserSummary(c *gin.Context) {
 			daily[key] = b
 		}
 		b.Submissions++
+		if frozen(sub) {
+			continue
+		}
+		tried[sub.ProblemID] = true
+		byStatus[sub.Status]++
 		if sub.Status == model.SubAC {
 			if _, seen := firstACAt[sub.ProblemID]; !seen {
 				firstACAt[sub.ProblemID] = sub.CreatedAt
@@ -249,7 +275,7 @@ func (s *Server) publicUserSummary(c *gin.Context) {
 	recentAC := make([]gin.H, 0, 20)
 	for i := len(subs) - 1; i >= 0 && len(recentAC) < 20; i-- {
 		sub := subs[i]
-		if sub.Status != model.SubAC || !sub.CreatedAt.Equal(firstACAt[sub.ProblemID]) {
+		if frozen(sub) || sub.Status != model.SubAC || !sub.CreatedAt.Equal(firstACAt[sub.ProblemID]) {
 			continue
 		}
 		recentAC = append(recentAC, gin.H{
