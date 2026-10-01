@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { EditorView, basicSetup } from 'codemirror'
 import { cpp } from '@codemirror/lang-cpp'
 import { python } from '@codemirror/lang-python'
@@ -62,6 +62,11 @@ watch(
 
 onMounted(() => {
   if (host.value && !view) view = build(props.modelValue)
+})
+
+onBeforeUnmount(() => {
+  view?.destroy()
+  view = null
 })
 </script>
 
