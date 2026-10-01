@@ -140,7 +140,10 @@ func (s *Server) updateSolution(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid payload"})
 		return
 	}
-	updates := map[string]any{"title": *req.Title, "body_md": *req.BodyMD}
+	updates := map[string]any{"body_md": *req.BodyMD}
+	if req.Title != nil {
+		updates["title"] = *req.Title
+	}
 	if req.IsOfficial != nil {
 		// only problem author/admin may flip the official pin
 		if isAdminRole(claims.Role) || s.isProblemAuthor(c, sol.ProblemID) {
