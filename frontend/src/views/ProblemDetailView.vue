@@ -10,7 +10,7 @@ import {
 } from '../api/client'
 import { useLiveSubmission } from '../composables/useLiveSubmission'
 import { useAuthStore } from '../stores/auth'
-import { renderStatement } from '../utils/markdown'
+import { renderStatement, sanitizeHtml } from '../utils/markdown'
 import MarkdownEditor from '../components/MarkdownEditor.vue'
 import CodeEditor from '../components/CodeEditor.vue'
 import LiveVerdictCard from '../components/LiveVerdictCard.vue'
@@ -76,10 +76,17 @@ const isModerator = computed(() => {
   return auth.isAdmin || problem.value.problem.created_by === auth.user.id
 })
 
+// body_md 是用户可写的原始 HTML（可绕过编辑器直接 POST），渲染走 v-html，
+// 展示前统一消毒
+async function loadSolutions() {
+  const list = await Solutions.list(route.params.id as string)
+  solutions.value = list.map((s) => ({ ...s, body_md: sanitizeHtml(s.body_md) }))
+}
+
 onMounted(async () => {
   problem.value = await Problems.get(route.params.id as string)
   try {
-    solutions.value = await Solutions.list(route.params.id as string)
+    await loadSolutions()
   } catch (e: unknown) {
     // 403 = locked: record the backend reason for the locked-state panel
     solLocked.value = errMsg(e)
@@ -122,7 +129,7 @@ async function saveSolution() {
         parent_id: solForm.value.parent_id ?? undefined,
       })
     }
-    solutions.value = await Solutions.list(route.params.id as string)
+    await loadSolutions()
     editorOpen.value = false
     toast.success('已保存')
   } catch (e) {
@@ -135,7 +142,7 @@ async function toggleOfficial(sol: ProblemSolution) {
     await Solutions.update(route.params.id as string, sol.id, {
       title: sol.title, body_md: sol.body_md, is_official: !sol.is_official,
     })
-    solutions.value = await Solutions.list(route.params.id as string)
+    await loadSolutions()
   } catch (e) {
     toast.error(errMsg(e))
   }
@@ -144,7 +151,7 @@ async function toggleOfficial(sol: ProblemSolution) {
 async function deleteSolution(sol: ProblemSolution) {
   try {
     await Solutions.remove(route.params.id as string, sol.id)
-    solutions.value = await Solutions.list(route.params.id as string)
+    await loadSolutions()
   } catch (e) {
     toast.error(errMsg(e))
   }

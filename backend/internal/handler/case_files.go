@@ -112,7 +112,15 @@ func (s *Server) previewCase(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "bad kind"})
 		return
 	}
-	path := filepath.Join(s.Cfg.DataDir, "testdata", fmt.Sprint(prob.ID), caseParamFile(caseID, kind))
+	// caseId is the TestCase primary key (as in deleteSingleCase); the
+	// on-disk file name follows CaseIndex. The two diverge once problems
+	// share the auto-increment, so resolve the row before touching disk.
+	tc := &model.TestCase{}
+	if err := s.DB.First(tc, caseID).Error; err != nil || tc.ProblemID != prob.ID {
+		c.JSON(404, gin.H{"error": "test case not found"})
+		return
+	}
+	path := filepath.Join(s.Cfg.DataDir, "testdata", fmt.Sprint(prob.ID), caseParamFile(uint(tc.CaseIndex), kind))
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "case file not found"})

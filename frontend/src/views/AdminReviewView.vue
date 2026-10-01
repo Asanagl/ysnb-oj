@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { MyProblems, errMsg, type Problem } from '../api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Table,
