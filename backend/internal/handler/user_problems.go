@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 
 	"github.com/ysnb/oj/internal/auth"
 	"github.com/ysnb/oj/internal/model"
@@ -106,10 +107,13 @@ func (s *Server) updateMyProblem(c *gin.Context) {
 	}
 	// resubmit-only request: a rejected author can send the problem back to
 	// the pending queue without changing content (frontend 重投 button).
+	// Both request shapes share one body, so binds go through
+	// ShouldBindBodyWith — a plain ShouldBindJSON drains the body and the
+	// second bind always EOFs into a spurious 400.
 	var probe struct {
 		Resubmit bool `json:"resubmit"`
 	}
-	if err := c.ShouldBindJSON(&probe); err == nil && probe.Resubmit {
+	if err := c.ShouldBindBodyWith(&probe, binding.JSON); err == nil && probe.Resubmit {
 		if prob.ReviewStatus == ReviewRejected {
 			if err := s.DB.Model(prob).Update("review_status", ReviewPending).Error; err != nil {
 				c.JSON(500, gin.H{"error": "resubmit failed"})
@@ -120,7 +124,7 @@ func (s *Server) updateMyProblem(c *gin.Context) {
 		return
 	}
 	var payload problemPayload
-	if err := c.ShouldBindJSON(&payload); err != nil || payload.normalize() != nil {
+	if err := c.ShouldBindBodyWith(&payload, binding.JSON); err != nil || payload.normalize() != nil {
 		c.JSON(400, gin.H{"error": "invalid payload"})
 		return
 	}
